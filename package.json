@@ -1,0 +1,36 @@
+{
+  "name": "ally",
+  "private": true,
+  "version": "0.1.0",
+  "description": "An agent that tries to use your website the way a blind person does, and tells you the exact step where it gave up.",
+  "packageManager": "pnpm@11.23.0",
+  "engines": {
+    "node": ">=22"
+  },
+  "scripts": {
+    "dev": "pnpm --parallel --filter \"./backend\" --filter \"./frontend\" dev",
+    "dev:api": "pnpm --filter @ally/backend dev:api",
+    "dev:worker": "pnpm --filter @ally/backend dev:worker",
+    "dev:web": "pnpm --filter @ally/frontend dev",
+    "dev:fixture": "pnpm --filter @ally/fixture-broken-shop dev",
+    "agent": "pnpm --filter @ally/backend agent",
+    "build": "pnpm --filter @ally/shared build && pnpm -r --filter \"!@ally/shared\" build",
+    "typecheck": "pnpm -r typecheck",
+    "lint": "pnpm -r lint",
+    "test": "pnpm -r test",
+    "test:integration": "pnpm --filter @ally/backend test:integration",
+    "test:e2e": "pnpm --filter @ally/backend test:e2e",
+    "db:migrate": "pnpm --filter @ally/backend prisma migrate dev",
+    "db:studio": "pnpm --filter @ally/backend prisma studio",
+    "docker:up": "docker compose up -d postgres redis",
+    "docker:all": "docker compose up --build",
+    "preflight": "node infra/scripts/preflight.mjs"
+  },
+  "devDependencies": {
+    "@types/node": "^22.10.0",
+    "typescript": "^5.7.0",
+    "vitest": "^2.1.0",
+    "eslint": "^9.17.0",
+    "prettier": "^3.4.0"
+  }
+}

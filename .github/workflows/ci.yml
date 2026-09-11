@@ -1,0 +1,108 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  PNPM_VERSION: 11.23.0
+  NODE_VERSION: 22
+
+jobs:
+  # The purity suite asserts the agent never receives pixels or coordinates.
+  # It is separated so a failure is unmissable in the checks list.
+  purity:
+    name: Purity suite (blocking)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+        with: { version: '${{ env.PNPM_VERSION }}' }
+      - uses: actions/setup-node@v4
+        with: { node-version: '${{ env.NODE_VERSION }}', cache: pnpm }
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm --filter @ally/shared build
+      - name: Assert the agent receives no pixels
+        run: pnpm --filter @ally/backend vitest run tests/unit/purity.test.ts
+
+  checks:
+    name: Typecheck, lint, unit tests
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+        with: { version: '${{ env.PNPM_VERSION }}' }
+      - uses: actions/setup-node@v4
+        with: { node-version: '${{ env.NODE_VERSION }}', cache: pnpm }
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm --filter @ally/shared build
+      - run: pnpm typecheck
+      # jsx-a11y runs as an error, not a warning. We ship an accessibility
+      # product; our own dashboard failing a lint rule is not acceptable.
+      - run: pnpm lint
+      - run: pnpm test
+
+  integration:
+    name: Integration (real Chromium, fixture sites)
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:16-alpine
+        env: { POSTGRES_USER: ally, POSTGRES_PASSWORD: ally, POSTGRES_DB: ally }
+        ports: ['5432:5432']
+        options: >-
+          --health-cmd "pg_isready -U ally" --health-interval 5s
+          --health-timeout 3s --health-retries 10
+      redis:
+        image: redis:7-alpine
+        ports: ['6379:6379']
+        options: >-
+          --health-cmd "redis-cli ping" --health-interval 5s
+          --health-timeout 3s --health-retries 10
+    env:
+      DATABASE_URL: postgresql://ally:ally@localhost:5432/ally
+      REDIS_URL: redis://localhost:6379
+      # Integration tests replay recorded model responses, so they are
+      # deterministic and cost nothing. See F-12.
+      ALLY_REPLAY_FIXTURES: '1'
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+        with: { version: '${{ env.PNPM_VERSION }}' }
+      - uses: actions/setup-node@v4
+        with: { node-version: '${{ env.NODE_VERSION }}', cache: pnpm }
+      - run: pnpm install --frozen-lockfile
+      # Without this cache every job re-downloads Chromium and CI takes six
+      # minutes instead of ninety seconds.
+      - name: Cache Playwright browsers
+        uses: actions/cache@v4
+        with:
+          path: ~/.cache/ms-playwright
+          key: pw-${{ runner.os }}-${{ hashFiles('pnpm-lock.yaml') }}
+      - run: pnpm --filter @ally/backend exec playwright install --with-deps chromium
+      - run: pnpm --filter @ally/shared build
+      - run: pnpm --filter @ally/backend exec prisma migrate deploy
+      - run: pnpm test:integration
+
+  images:
+    name: Build images
+    runs-on: ubuntu-latest
+    needs: [checks]
+    strategy:
+      matrix:
+        image: [api, worker, frontend]
+    steps:
+      - uses: actions/checkout@v4
+      - uses: docker/setup-buildx-action@v3
+      - uses: docker/build-push-action@v6
+        with:
+          context: .
+          file: infra/docker/${{ matrix.image }}.Dockerfile
+          push: false
+          cache-from: type=gha,scope=${{ matrix.image }}
+          cache-to: type=gha,mode=max,scope=${{ matrix.image }}

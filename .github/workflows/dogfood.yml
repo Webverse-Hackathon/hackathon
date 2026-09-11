@@ -1,0 +1,44 @@
+name: Dogfood — run Ally against Ally
+
+# We ship an accessibility product. If our own dashboard fails, we lose the room.
+# See the dogfood suite (D-01 to D-07) in docs/10-TEST-CASES.md.
+
+on:
+  pull_request:
+    paths:
+      - 'frontend/**'
+      - 'packages/shared/**'
+
+jobs:
+  dogfood:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+        with: { version: '11.23.0' }
+      - uses: actions/setup-node@v4
+        with: { node-version: '22', cache: pnpm }
+      - run: pnpm install --frozen-lockfile
+      - name: Cache Playwright browsers
+        uses: actions/cache@v4
+        with:
+          path: ~/.cache/ms-playwright
+          key: pw-${{ runner.os }}-${{ hashFiles('pnpm-lock.yaml') }}
+      - run: pnpm --filter @ally/frontend exec playwright install --with-deps chromium
+      - run: pnpm --filter @ally/shared build
+      - run: pnpm --filter @ally/frontend build
+
+      - name: axe scan of every dashboard route (D-01)
+        run: pnpm --filter @ally/frontend test:a11y
+
+      # D-02 and D-03: Ally completes real goals on our own dashboard.
+      # Failing these is worse than any other test failure in the repo.
+      - name: Ally completes "start a run" on our own dashboard (D-02)
+        run: pnpm agent --url http://localhost:3000 --goal "start a run for example.com" --expect SUCCEEDED
+        env:
+          ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+
+      - name: Ally completes "submit a barrier report" (D-03)
+        run: pnpm agent --url http://localhost:3000/barrier --goal "submit a barrier report" --expect SUCCEEDED
+        env:
+          ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}

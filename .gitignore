@@ -1,0 +1,48 @@
+# dependencies
+node_modules/
+.pnpm-store/
+
+# builds
+dist/
+build/
+.next/
+out/
+*.tsbuildinfo
+
+# env
+.env
+.env.local
+.env.*.local
+!.env.example
+
+# secrets — never commit these
+*.pem
+*.key
+github-app-private-key*
+!pulse-vps-key.pub
+
+# runtime artefacts
+recordings/
+playwright-report/
+test-results/
+coverage/
+.vitest/
+
+# prisma
+backend/prisma/*.db
+backend/prisma/migrations/dev.db*
+
+# logs
+*.log
+npm-debug.log*
+pnpm-debug.log*
+
+# os / editor
+.DS_Store
+Thumbs.db
+.idea/
+*.swp
+
+# keep .vscode/extensions.json but nothing else
+.vscode/*
+!.vscode/extensions.json
