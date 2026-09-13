@@ -28,7 +28,7 @@ jobs:
       - run: pnpm install --frozen-lockfile
       - run: pnpm --filter @ally/shared build
       - name: Assert the agent receives no pixels
-        run: pnpm --filter @ally/backend vitest run tests/unit/purity.test.ts
+        run: pnpm --filter @ally/backend test:purity
 
   checks:
     name: Typecheck, lint, unit tests

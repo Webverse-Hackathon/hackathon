@@ -229,16 +229,16 @@ reports progress on the same SSE stream under `fix.*` events.
 
 ```
 event: fix.stage      data: {"stage":"locate","status":"running"}
-event: fix.located    data: {"filePath":"components/ProductCard.tsx","lineStart":41,"lineEnd":47,"method":"data-attribute","confidence":1.0}
+event: fix.located    data: {"filePath":"components/ProductCard.tsx","lineStart":41,"lineEnd":47,"locateMethod":"data-attribute","locateConfidence":1.0}
 event: fix.generated  data: {"diff":"--- a/...","linesChanged":4,"rationale":"..."}
 event: fix.validated  data: {"passed":true,"gates":{"appliesCleanly":true,"parses":true,"typechecks":true,"jsxA11y":true,"sizeOk":true},"attempts":1}
-event: fix.pr         data: {"number":12,"url":"https://github.com/.../pull/12","branch":"ally/fix-clx8f0"}
+event: fix.pr         data: {"owner":"Webverse-Hackathon","repo":"ally-demo-shop","number":12,"url":"https://github.com/.../pull/12","branch":"ally/fix-clx8f0","state":"open","verified":false}
 event: fix.verifying  data: {"verifyRunId":"clx9a1...","liveUrl":"/live/clx9a1..."}
 event: fix.verified   data: {"success":true,"stepsUsed":11,"before":7,"after":11}
 event: fix.failed     data: {"stage":"validate","reason":"three attempts failed the typecheck gate","suggestedDiff":"..."}
 ```
 
-`fix.located` with `confidence < 0.8` pauses and waits for `POST /api/runs/:id/fix/confirm` before
+`fix.located` with `locateConfidence < 0.8` pauses and waits for `POST /api/runs/:id/fix/confirm` before
 continuing. We never patch a file we are not confident we identified.
 
 ---
@@ -303,12 +303,14 @@ Status page data: the original words, the extraction, the run outcome
 
 ## `GET /api/runs`
 
-Paginated history. Query: `?status=&repo=&limit=20&cursor=`. Returns a slim run summary list, not
-full reports.
+Paginated history. Query: `?status=&repo=&limit=20&cursor=` (`repo` is `owner/name`, `limit` is
+1..100). Returns a slim run summary list, not full reports:
+`{ "runs": RunSummary[], "nextCursor": string | null }`.
 
 ## `GET /api/health`
 
 `{ "status": "ok", "db": "ok", "redis": "ok", "queueDepth": 0, "browserPoolFree": 2 }`
+When a dependency is unreachable: `"status": "degraded"` and that dependency reads `"down"`.
 Used by the ALB target group health check and by the demo-day preflight script.
 
 ## `POST /api/github/webhook`

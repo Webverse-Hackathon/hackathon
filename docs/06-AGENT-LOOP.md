@@ -15,7 +15,8 @@ contains an image block or a coordinate-shaped field. If that test ever fails, t
 ## The loop
 
 ```ts
-// backend/src/agent/loop.ts — shape, not final code
+// backend/src/agent/loop.ts — shape, not final code. The real loop receives an AgentDriver already
+// bound to an open session (DECISIONS.md #10), so there is no driver.open() on the agent's side.
 
 async function runGoal(driver: Driver, goal: string, budget = 20): Promise<RunOutcome> {
   const history: Turn[] = [];
@@ -86,6 +87,9 @@ read_focus      { }                                 // re-announce the focused n
 declare_success { evidence: string }                // what in the transcript proves the goal is done
 declare_blocked { category: BlockerCategory, reason: string, axNodeId?: string }
 ```
+
+As the model sees them, every tool also takes `reasoning` and `confidence`; `agent/tools.ts` strips
+those before validating the call against the shared schema (`DECISIONS.md` #11).
 
 Notes that matter:
 
@@ -173,6 +177,8 @@ timing, lazy loading, A/B tests. A demo that flaps is a demo that fails.
 Four mitigations, all required:
 
 1. **Temperature 0** on the decision model. Narration may use a little sampling; decisions may not.
+   *Not available on Claude Sonnet 5, which rejects sampling parameters. See `DECISIONS.md` #9 and F-66;
+   the other three mitigations and category gating carry the weight.*
 2. **Record and replay.** Every run writes its AX snapshots and model responses to a recording keyed
    by run id. `ALLY_REPLAY=<runId>` re-executes the entire run from disk with no browser and no
    network. This is the demo-day safety net and it is not optional. See F-12 and F-50.

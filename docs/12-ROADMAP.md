@@ -30,13 +30,14 @@ want to know that on day one rather than day three.
 **Definition of done: a terminal script prints a screen-reader transcript of a real page and an
 agent gives up on a real goal, with a reason.** No database, no API, no frontend.
 
-- [ ] `driver/` — Playwright plus CDP `Accessibility.getFullAXTree`, with the five-function surface
-- [ ] `driver/serialize.ts` — AX tree to transcript lines, with unit tests against recorded trees
-- [ ] `agent/loop.ts` — the loop, the five tools, the step budget
-- [ ] `llm/provider.ts` — the Anthropic adapter, `narrate()` and `decide()`
-- [ ] A CLI: `pnpm agent --url <url> --goal "<goal>"`, printing the transcript and the outcome
-- [ ] `fixtures/broken-shop` — the deliberately broken storefront, built with `ALLY_SOURCE=1`
-- [ ] The purity suite (P-1 to P-5) passing
+- [x] `driver/` — Playwright plus CDP `Accessibility.getFullAXTree`, with the five-function surface
+- [x] `driver/serialize.ts` — AX tree to transcript lines, with unit tests against recorded trees
+- [x] `agent/loop.ts` — the loop, the five tools, the step budget
+- [x] `llm/provider.ts` — the Anthropic adapter, `narrate()` and `decide()`
+- [x] A CLI: `pnpm agent --url <url> --goal "<goal>"`, printing the transcript and the outcome
+- [x] `fixtures/broken-shop` — the deliberately broken storefront (the `ALLY_SOURCE=1` plugin itself is Day 3)
+- [x] The purity suite (P-1 to P-5) passing
+- [ ] **The gate:** a live `pnpm agent` run against `broken-shop` with a real API key produces a sensible blocker
 
 **Stop-and-reassess trigger:** if by the end of day one the agent cannot produce a sensible blocker
 on `broken-shop`, escalate immediately. Prompt problem, serialiser problem, or premise problem —
@@ -91,8 +92,8 @@ Morning — hardening:
 - [ ] The golden fixture suite, all twelve sites, with expected categories
 - [ ] SSRF guard, all eleven URL cases (F-01)
 - [ ] Prompt-injection handling and the `injection` fixture (F-14)
-- [ ] Success confirmation and the downgrade path (F-13)
-- [ ] Narration vocabulary guard (F-18)
+- [x] Success confirmation and the downgrade path (F-13) — done early, in Phase 1
+- [x] Narration vocabulary guard (F-18) — done early, in Phase 1
 - [ ] Orphan-run sweeper and the heartbeat (F-24)
 - [ ] The dogfood suite: Ally against our own dashboard, zero axe violations
 

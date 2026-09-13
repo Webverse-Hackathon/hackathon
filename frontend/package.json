@@ -7,7 +7,7 @@
     "build": "next build",
     "start": "next start -p 3000",
     "typecheck": "tsc --noEmit",
-    "lint": "next lint --max-warnings=0",
+    "lint": "eslint . --max-warnings=0",
     "test": "vitest run",
     "test:a11y": "playwright test tests/a11y"
   },

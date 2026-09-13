@@ -168,6 +168,13 @@ axe scores as clean and a human cannot use. If a judge asks for proof of the pre
 
 ## 4 · Integration tests
 
+**Where Phase 1 stands.** `backend/tests/integration/broken-shop.test.ts` runs I-01 against real
+Chromium and the real fixture with a *scripted* model, so it checks the driver, the serialiser and the
+loop, not the model's judgement. Recorded model responses arrive with record-and-replay (Day 4). The
+recorded AX session used by the unit golden tests and the purity suite is
+`backend/tests/fixtures/broken-shop/home-tab-cart.json`; re-record it with
+`backend/tests/tools/record-session.ts` whenever the fixture changes.
+
 `backend/tests/integration/`. Real Chromium, real fixture sites, the model replaced by a recorded
 transcript so they are deterministic and free.
 
@@ -240,7 +247,12 @@ whose pull request was closed externally. A barrier report whose run errored.
 
 | Date | ID | Bug | Fixture / test added | Commit |
 |---|---|---|---|---|
-| — | — | *(empty — add the first row when the first bug is fixed)* | — | — |
+| 2026-09-14 | F-64 | `focusInfo` reported the page root after every Tab, so every keystroke looked like "focus did not move" | `backend/tests/unit/serialize.test.ts` golden "Tab walks the header in order"; integration I-01 | uncommitted |
+| 2026-09-14 | F-65 | Three unusable model decisions became a `BLOCKED / AMBIGUOUS_CONTROLS` finding against the site | `backend/tests/unit/loop.test.ts` "three unusable decisions in a row end the run as ERRORED" | uncommitted |
+| 2026-09-14 | F-69 | A step-1 re-perceive after F-17 was judged `CONTENT_NOT_REACHABLE` | `backend/tests/unit/loop.test.ts` "F-17" | uncommitted |
+| 2026-09-14 | F-67 | The CI purity step called a `vitest` script that does not exist, so the suite never ran | `pnpm --filter @ally/backend test:purity`, used by `ci.yml` | uncommitted |
+| 2026-09-14 | F-13 | The confirmation pattern accepted a bare "complete", so a heading "Complete your order" would have confirmed success | `backend/tests/unit/confirm.test.ts` "an instruction heading such as Complete your order is not confirmation" | uncommitted |
+| 2026-09-14 | — | `backend/tsconfig.json` set `rootDir: src` while including `tests/`, so the backend could never typecheck | `pnpm --filter @ally/backend typecheck` | uncommitted |
 
 ---
 

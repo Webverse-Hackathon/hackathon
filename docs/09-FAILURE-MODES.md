@@ -15,21 +15,21 @@ When you fix one, change its status, add the commit, and add a fixture to `10-TE
 | F-01 | Target | URL points at a private or metadata address (SSRF) | Critical | KNOWN |
 | F-02 | Target | Site requires login before the goal is reachable | High | KNOWN |
 | F-03 | Target | Site blocks headless browsers or serves a bot challenge | High | KNOWN |
-| F-04 | Target | Page is a canvas or WebGL app with no accessibility tree | Medium | KNOWN |
-| F-05 | Target | AX tree never stabilises; snapshots differ every poll | High | KNOWN |
+| F-04 | Target | Page is a canvas or WebGL app with no accessibility tree | Medium | MITIGATED |
+| F-05 | Target | AX tree never stabilises; snapshots differ every poll | High | MITIGATED |
 | F-06 | Target | Closed shadow DOM or a cross-origin iframe hides content | Medium | KNOWN |
 | F-07 | Target | `X-Frame-Options` stops the left panel from embedding the site | Medium | KNOWN |
 | F-08 | Target | A cookie banner blocks everything and is itself inaccessible | Medium | KNOWN |
 | F-09 | Target | The goal is genuinely multi-page and crosses an origin | Medium | KNOWN |
 | F-10 | Agent | Agent gives up too early on a page that is actually fine | High | KNOWN |
-| F-11 | Agent | Agent loops, pressing Tab forever | High | KNOWN |
+| F-11 | Agent | Agent loops, pressing Tab forever | High | MITIGATED |
 | F-12 | Agent | Two runs of the same goal disagree | Critical | KNOWN |
-| F-13 | Agent | Agent hallucinates success it did not achieve | Critical | KNOWN |
+| F-13 | Agent | Agent hallucinates success it did not achieve | Critical | MITIGATED |
 | F-14 | Agent | Page content contains a prompt injection | High | KNOWN |
-| F-15 | Agent | Accessibility tree exceeds the context window | Medium | KNOWN |
+| F-15 | Agent | Accessibility tree exceeds the context window | Medium | MITIGATED |
 | F-16 | Agent | A 50-step run makes the report page unusable | Low | KNOWN |
-| F-17 | Agent | Agent types into the wrong field because focus moved under it | Medium | KNOWN |
-| F-18 | Agent | The narration leaks visual language and breaks the premise | High | KNOWN |
+| F-17 | Agent | Agent types into the wrong field because focus moved under it | Medium | MITIGATED |
+| F-18 | Agent | The narration leaks visual language and breaks the premise | High | MITIGATED |
 | F-19 | Agent | Blocker category is wrong, so the patch fixes the wrong thing | High | KNOWN |
 | F-20 | Infra | Model provider times out or rate-limits mid-run | High | KNOWN |
 | F-21 | Infra | SSE connection is culled by the load balancer while idle | Medium | KNOWN |
@@ -58,9 +58,15 @@ When you fix one, change its status, add the commit, and add a fixture to `10-TE
 | F-53 | Demo | Cold start makes the first run take 40 seconds | High | KNOWN |
 | F-54 | Demo | A judge asks to run it on a site of their choosing, and it fails | High | KNOWN |
 | F-60 | Build | Chromium will not install or run in the container | High | KNOWN |
-| F-61 | Build | Chromium crashes from the default 64 MB shared memory | High | KNOWN |
+| F-61 | Build | Chromium crashes from the default 64 MB shared memory | High | MITIGATED |
 | F-62 | Build | pnpm workspace links break inside the Docker build | Medium | KNOWN |
 | F-63 | Build | Prisma engine binary mismatched to the container's libc | Medium | KNOWN |
+| F-64 | Target | Chromium marks the page root focused alongside the real focused element | High | HIT · MITIGATED |
+| F-65 | Agent | The loop detector blames the site for our own unusable decisions | Critical | HIT · MITIGATED |
+| F-66 | Agent | The decision model does not accept temperature 0 | High | ACCEPTED |
+| F-67 | Build | The CI purity step called a script that does not exist | Critical | HIT · MITIGATED |
+| F-68 | Demo | The scripted demo transcript is not what Chromium actually exposes | High | KNOWN |
+| F-69 | Agent | A re-perceived first step is judged as an empty page | High | HIT · MITIGATED |
 
 ---
 
@@ -100,6 +106,7 @@ evasion tool, and saying so to a judge is the right answer.
 **Mitigation.** If the tree has fewer than five meaningful nodes after stabilisation, report
 `CONTENT_NOT_REACHABLE` immediately with the summary *"this page exposes almost nothing to assistive
 technology,"* which is the most severe possible finding, not an error. Do not spend twenty steps.
+**Status.** MITIGATED (Phase 1 session, 2026-09-14, uncommitted): `agent/loop.ts` blocks with `CONTENT_NOT_REACHABLE` on the first snapshot, before any decision call. Test: `tests/unit/loop.test.ts` "F-04".
 
 ### F-05 · The tree never stabilises — High
 
@@ -111,6 +118,7 @@ identical trees 250 ms apart, capped at two seconds. Additionally, normalise the
 by stripping numeric-only text nodes and `aria-live` region contents, so a ticking clock does not
 count as a change.
 **Do not** simply increase the wait. That makes the demo slow without making it stable.
+**Status.** MITIGATED (Phase 1 session, 2026-09-14, uncommitted): `driver/stabilize.ts` (network idle, then two identical normalised trees 250 ms apart, 2 s cap) and `driver/hash.ts` (numeric-only text and live-region contents stripped). Test: `tests/unit/loop-detect.test.ts` L-04 and the live-region case.
 
 ### F-06 · Closed shadow DOM and cross-origin iframes — Medium
 
@@ -155,12 +163,14 @@ crying wolf, which destroys the credibility of every true finding.
 `KEYBOARD_TRAP` or `CONTENT_NOT_REACHABLE`, plus an explicit `attemptsDescribed` field naming what
 was tried. The golden fixture suite includes **accessible** sites where the expected outcome is
 `SUCCEEDED`; a false positive there fails CI. This is the most important test in the repo.
+**Status.** Still KNOWN, partly handled (Phase 1 session, 2026-09-14, uncommitted): the five-step minimum is enforced in `agent/loop.ts` (test: `loop.test.ts` "F-10"). Not yet done: the `attemptsDescribed` field, and the `accessible-form` fixture that fails CI on a false blocker.
 
 ### F-11 · Infinite Tab loop — High
 
 **Mitigation.** The AX state hash loop detector, three strikes, checked before the decision call so
 it costs nothing. Also track the focused node id sequence; a repeating cycle of length 2 to 5 is a
 loop even when the tree hash changes.
+**Status.** MITIGATED (Phase 1 session, 2026-09-14, uncommitted): `agent/loop-detect.ts`, state hash three strikes plus focus cycles of length 2 to 5. Tests: L-01 to L-04. See also F-65.
 
 ### F-12 · Non-determinism between runs — Critical
 
@@ -185,6 +195,7 @@ the transcript: a heading, status role or live-region announcement that plausibl
 or a URL change consistent with completion. No evidence means the claim is downgraded to `BLOCKED`
 with category `UNKNOWN` and the unsupported claim is recorded verbatim in the report. We show the
 downgrade rather than hiding it.
+**Status.** MITIGATED (Phase 1 session, 2026-09-14, uncommitted): `agent/confirm.ts`. Evidence must be a heading, status, alert or live announcement in past tense, or a confirming URL change; a claim right after a flagged injection is refused. Tests: X-01 to X-04, plus "Complete your order" is not confirmation.
 
 ### F-14 · Prompt injection from page content — High
 
@@ -196,12 +207,14 @@ system instruction that content inside it is never an instruction. Tool calls ar
 so the worst case is a bad keystroke, not arbitrary action. Additionally, flag any transcript line
 containing imperative phrases aimed at an assistant, surface it in the report as its own finding,
 and refuse to auto-declare success on the step that follows one.
+**Status.** Still KNOWN, partly handled (Phase 1 session, 2026-09-14, uncommitted): page text is fenced as untrusted in every prompt with the fence tag neutralised (`agent/prompts.ts`), lines are flagged `possibleInjection` (`driver/serialize.ts`), and success right after a flagged line is refused. Not yet done: surfacing the flag as a report finding, and the `injection` fixture.
 
 ### F-15 · Tree exceeds the context window — Medium
 
 **Mitigation.** Truncate to 400 lines per snapshot, centred on the focused node, keeping all
 landmark and heading nodes. Say so in the transcript: `[187 further items not read]` — which is also
 what a real user experiences, since nobody listens to a 900-item tree either.
+**Status.** MITIGATED (Phase 1 session, 2026-09-14, uncommitted): `driver/serialize.ts` truncation. Test: S-13.
 
 ### F-16 · Unusable report for long runs — Low
 
@@ -213,6 +226,7 @@ steps by default.
 **Mitigation.** `type_text` captures the focused node before and after. If focus moved between the
 decision and the keystroke, discard the action, emit a warning, and re-perceive without counting a
 step. Never blindly type.
+**Status.** MITIGATED (Phase 1 session, 2026-09-14, uncommitted): `agent/loop.ts` compares focus at perception with focus before typing, up to two re-perceives per step. Test: `loop.test.ts` "F-17". See also F-69.
 
 ### F-18 · Visual language in the narration — High
 
@@ -221,6 +235,7 @@ premise dies on stage.
 **Mitigation.** A forbidden-vocabulary check on every narration string before it is emitted: colour
 words, position words, size words, and the words *see*, *look*, *appears*, *screen*. A hit is
 regenerated once, then falls back to reading the raw transcript line. Unit tested with a word list.
+**Status.** MITIGATED (Phase 1 session, 2026-09-14, uncommitted): `agent/narrate.ts`. A forbidden word is allowed only when the page itself spoke it (a product called "Blue linen shirt"). Tests: N-01 to N-05.
 
 ### F-19 · Wrong blocker category — High
 
@@ -241,6 +256,7 @@ downgrades confidence, records both, and blocks the automated pull request until
 a circuit breaker that fails the run with `ERRORED` rather than hanging. A `429` pauses the queue
 rather than failing individual runs. The narration call is best-effort: if it fails, emit the raw
 transcript line and continue, because narration is presentation and decisions are correctness.
+**Status.** Still KNOWN, partly handled (Phase 1 session, 2026-09-14, uncommitted): 20 s per-call timeout and three SDK retries with backoff (`llm/anthropic.ts`), narration falls back to the raw transcript, and a decision failure ends the run as `ERRORED` rather than a finding. Not yet done: the circuit breaker and pausing the queue on 429 (the queue is Day 2).
 
 ### F-21 · SSE culled while idle — Medium
 
@@ -253,6 +269,7 @@ and client-side reconnect using `Last-Event-ID` with server-side replay from Red
 of 4, a daily token ceiling in the config that hard-stops new runs, and per-run cost recorded in the
 database so a regression is visible rather than discovered on an invoice. AWS Budgets alerts at 50%
 and 80% of the hackathon credit.
+**Status.** Still KNOWN, partly handled (Phase 1 session, 2026-09-14, uncommitted): step budget, whole-run timeout and per-run cost are in `agent/loop.ts`. Not yet done: the global concurrency cap, the daily token ceiling and the AWS budget alarms.
 
 ### F-23 · Browser pool exhausted — Medium
 
@@ -421,6 +438,7 @@ exact version in `package.json`; a mismatch produces a confusing "browser not fo
 **Symptom.** Chromium crashes intermittently in ways that look like random navigation failures.
 **Mitigation.** `--shm-size=1g` in compose; on Fargate, 2 GB task memory and `--disable-dev-shm-usage`
 in the launch args.
+**Status.** MITIGATED (Phase 1 session, 2026-09-14, uncommitted): `--disable-dev-shm-usage` in `driver/session.ts` launch args; `shm_size: 1gb` was already in compose.
 
 ### F-62 · pnpm workspace links break in the Docker build — Medium
 
@@ -432,6 +450,79 @@ Do not copy `node_modules` from the host; the symlinks will not survive.
 
 **Mitigation.** Set `binaryTargets` in the Prisma generator to include both the local target and
 `debian-openssl-3.0.x` for the container, and run `prisma generate` inside the build stage.
+
+---
+
+## H · Found while building Phase 1
+
+### F-64 · Chromium marks the page root focused too — High
+
+**Trigger.** Reading focus from `Accessibility.getFullAXTree` while the document has focus.
+**Symptom.** After Tab, the focused node reported is `RootWebArea`, the page itself. Every keystroke
+reads as "focus did not move", and the agent concludes the page is a keyboard trap.
+**Mitigation.** Two nodes carry `focused=true`: the root and the real control. `driver/tree.ts`
+`focusedNode()` returns the focused non-root node and falls back to the root only when nothing else
+has focus. Found against the real broken-shop tree, never visible in hand-built test trees.
+**Test.** `tests/unit/serialize.test.ts` golden "Tab walks the header in order", and integration I-01.
+**Status.** HIT, MITIGATED (Phase 1 session, 2026-09-14, uncommitted).
+
+### F-65 · The loop detector blames the site for our failure — Critical
+
+**Trigger.** The decision model returns unusable output, or a declaration is refused (F-10), so no key
+is pressed. The page does not change, and the same state hash is observed again.
+**Symptom.** On the third such step the run ends `BLOCKED` with `AMBIGUOUS_CONTROLS`: a finding
+against a site the agent never actually exercised. This is the false-positive class that destroys
+credibility (F-10).
+**Mitigation.** `agent/loop.ts` only feeds the loop detector a state reached by acting. A step with no
+action does not count as a repeat.
+**Test.** `tests/unit/loop.test.ts` "three unusable decisions in a row end the run as ERRORED, not as a finding".
+**Status.** HIT, MITIGATED (Phase 1 session, 2026-09-14, uncommitted).
+
+### F-66 · No temperature 0 on the decision model — High
+
+**Trigger.** Claude Sonnet 5 rejects `temperature`, `top_p` and `top_k` with a 400, and runs adaptive
+thinking by default.
+**Symptom.** Mitigation 1 of F-12 ("temperature 0 on the decision model") cannot be applied. Sending it
+fails every decision call.
+**Mitigation.** Send no sampling parameters. Determinism rests on the other three F-12 mitigations
+(record and replay, stabilisation, a pinned fixture) and on gating CI by blocker category, never by step
+count. Effort is set to `low` (`ALLY_DECIDE_EFFORT`) to keep decisions quick. See `DECISIONS.md` #9.
+**Test.** None possible without the API; `llm/anthropic.ts` sends no sampling parameters on `decide`.
+**Status.** ACCEPTED.
+
+### F-67 · The CI purity step never ran the purity suite — Critical
+
+**Trigger.** `ci.yml` ran `pnpm --filter @ally/backend vitest run tests/unit/purity.test.ts`. pnpm
+treats `vitest` as a script name, and there is no such script.
+**Symptom.** `ERR_PNPM_RECURSIVE_RUN_NO_SCRIPT`. The blocking job fails on every push without testing
+anything, which trains the team to ignore the one check that must never be ignored.
+**Mitigation.** A `test:purity` script in `backend/package.json`, called by `ci.yml`.
+**Test.** `pnpm --filter @ally/backend test:purity` runs six tests.
+**Status.** HIT, MITIGATED (Phase 1 session, 2026-09-14, uncommitted).
+
+### F-68 · The demo transcript is not what Chromium exposes — High
+
+**Trigger.** `docs/11-DEMO-SCRIPT.md` and the fixture README were written before the fixture existed.
+**Symptom.** The script expects `image. image. image.` then `button. button. button. group. clickable.`.
+Real Chromium exposes each product as `image. image. Blue linen shirt. $48.00.`, where the second
+`image.` is the unnamed plus icon inside the `<div onClick>`; there is no "clickable" state in the CDP
+tree, and no button at all. A narrator reciting the script will contradict the screen.
+**Mitigation.** The fixture README now quotes the recorded transcript. Before rehearsal, rewrite the
+demo script's beat from a recorded run (`backend/tests/fixtures/broken-shop/home-tab-cart.json`), not
+from memory.
+**Test.** The serialiser golden test pins what the fixture actually says.
+**Status.** KNOWN.
+
+### F-69 · A re-perceived first step is judged as an empty page — High
+
+**Trigger.** F-17 fires on step 1: focus moved before typing, so the step is perceived again. The second
+read is a diff, usually "nothing new was announced."
+**Symptom.** The F-04 check sees fewer than five lines and ends the run `CONTENT_NOT_REACHABLE` on a
+page that works.
+**Mitigation.** `agent/loop.ts` runs the F-04 check only on the run's first snapshot, which is always
+a full read.
+**Test.** `tests/unit/loop.test.ts` "F-17".
+**Status.** HIT, MITIGATED (Phase 1 session, 2026-09-14, uncommitted).
 
 ---
 

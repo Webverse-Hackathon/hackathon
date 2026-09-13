@@ -157,10 +157,75 @@ by the replay fallback, which does not need the server at all.
 
 ---
 
+## 9 · No sampling parameters on the decision model; determinism rests on replay
+**2026-09-14 · accepted** · refines #3
+
+**Context.** Decision #3 and `docs/06-AGENT-LOOP.md` call for temperature 0 on the decision model.
+Claude Sonnet 5 rejects `temperature`, `top_p` and `top_k` with a 400, and runs adaptive thinking by
+default. With thinking on, a forced `tool_choice` is not allowed either.
+
+**Decision.** Keep Sonnet 5. Send no sampling parameters, keep adaptive thinking at effort `low`
+(`ALLY_DECIDE_EFFORT`), use `tool_choice: auto` with one tool call per turn, strict tool schemas, and
+a system instruction to always call exactly one tool. A response with no usable call is retried once
+with the error, then counted.
+
+**Rejected.** Dropping to a model that accepts temperature: a weaker decision model in exchange for
+a determinism guarantee the other mitigations already provide. Disabling thinking: documented to
+make newer models occasionally write a tool call as text instead of calling it.
+
+**Consequence.** Two live runs can differ in steps. That was already true across provider-side
+changes (F-12), so CI and the demo gate on blocker category, and the stage fallback is replay. F-66.
+
+---
+
+## 10 · The driver's five functions take an opaque session; opening one is privileged
+**2026-09-14 · accepted**
+
+**Context.** Purity test P-1 requires the driver to export exactly five functions, but something has
+to launch Chromium, navigate to the start URL and close the browser, and `docs/06` sketched
+`driver.open()` and `driver.apply()` on the agent's side.
+
+**Decision.** `driver/index.ts` exports only `axSnapshot`, `pressKey`, `typeText`, `focusInfo` and
+`currentUrl`, each taking a `DriverSession` handle whose Playwright objects live in a private
+`WeakMap`. `driver/session.ts`, used by the CLI and later the worker, opens and closes sessions and
+binds the five functions into an `AgentDriver`. The agent loop receives only that `AgentDriver`; eslint
+forbids `agent/` from importing `session`, `internal`, `cdp`, `stabilize` or `index`. The agent may
+import the pure driver modules `serialize`, `hash`, `tree` and `types`.
+
+**Rejected.** A driver class with `open()` on it, which hands the agent navigation. Returning the
+Playwright page from `openSession`, which lets a later caller leak it.
+
+**Consequence.** The agent cannot navigate, screenshot or evaluate even by accident, and the loop is
+testable with a replay driver and no browser. Anything privileged, such as the Day 3 fiber lookup,
+must go through `session.ts`-level code outside `agent/`.
+
+---
+
+## 11 · The provider interface carries whole requests, text only
+**2026-09-14 · accepted**
+
+**Context.** P-2 and P-3 assert what is *sent* to a model, so a spy must see the final prompt, not
+just the inputs to it. The model also has to return reasoning and confidence for `step.decision`,
+while the shared `AgentToolSchema` is strict.
+
+**Decision.** `LlmProvider` has `narrate(request)` and `decide(request)`, each taking a complete
+`ModelRequest` built in `agent/prompts.ts`. A `ModelRequest` can only hold text blocks. Model choice
+lives in the adapter (`llm/anthropic.ts`, the only file allowed to import the SDK). Each tool's model
+schema adds `reasoning` and `confidence`, which `agent/tools.ts` strips before validating the rest
+against the shared schema.
+
+**Rejected.** `narrate(transcript)` and `decide(goal, history)` with prompt assembly inside the
+adapter, which would hide the real prompt from the purity spy and duplicate prompts per provider.
+
+**Consequence.** Swapping providers means one adapter that maps text blocks and tool definitions.
+Prompt caching is expressed as a `cache` flag on a block, which a provider without caching ignores.
+
+---
+
 ## Template for the next entry
 
 ```md
-## 9 · Title
+## 12 · Title
 **YYYY-MM-DD · accepted**
 
 **Context.**
