@@ -78,6 +78,8 @@ export interface FixTarget {
   outerHtml: string;
   domPath: string;
   textContent: string;
+  /** Why this element, when it is not the node the agent named (F-84). Given to the patch model. */
+  reason?: string | null;
 }
 
 export interface CreateRunInput {

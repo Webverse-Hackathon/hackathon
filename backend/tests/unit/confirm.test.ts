@@ -16,6 +16,15 @@ const line = (role: string, spoken: string, extra: Partial<TranscriptLine> = {})
 const base = { startUrl: 'https://shop.example/', currentUrl: 'https://shop.example/' };
 
 describe('confirmSuccess', () => {
+  it('X-10 a status announcement confirming a subscription is accepted (F-84)', () => {
+    const result = confirmSuccess({
+      ...base,
+      evidence: 'The page said I am subscribed',
+      recentLines: [line('status', 'Thanks, you are subscribed. Your code is on its way.', { states: ['announcement'] })],
+    });
+    expect(result.confirmed).toBe(true);
+  });
+
   it('X-01 a transcript containing "Order confirmed" is accepted', () => {
     const result = confirmSuccess({
       ...base,

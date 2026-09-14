@@ -283,6 +283,8 @@ whose pull request was closed externally. A barrier report whose run errored.
 | 2026-09-15 | F-82 | A `CONTENT_NOT_REACHABLE` blocker with no named node was mapped to the focused footer link, and locate stopped at 25% | `backend/tests/integration/api.test.ts` "F-82" asserts the fix target is `div.add` | uncommitted |
 | 2026-09-15 | F-13 | A real add-to-cart success ("Cart (0)" → Enter → "Cart (1)") was downgraded to `BLOCKED / UNKNOWN`, and Fix chased a live-region patch | `backend/tests/unit/confirm.test.ts` X-05 to X-09; `backend/tests/unit/loop.test.ts` "DECISIONS.md #18" | uncommitted |
 | 2026-09-15 | F-83 | The verify run lost the Tab order after an unannounced Enter, pressed Space on the same button and was abandoned at its 12-step budget | `backend/tests/unit/tab-order.test.ts` T-01 to T-05; `backend/tests/unit/loop.test.ts` "F-83"; verify budget at least 20 | uncommitted |
+| 2026-09-15 | F-84 | "subscribe to the newsletter" blocked on the Subscribe button; the confirmation was never announced and Fix targeted the button | `backend/tests/unit/silent-activation.test.ts`; `confirm.test.ts` X-10; `backend/tests/integration/api.test.ts` "F-84" ends with the verify run SUCCEEDED | uncommitted |
+| 2026-09-15 | F-85 | A unique classless `<button>Subscribe</button>` was located at 50% and Fix stopped at locate | `backend/tests/unit/patch.test.ts` "F-85" | uncommitted |
 
 ---
 

@@ -9,6 +9,7 @@
 
 import AxeBuilder from '@axe-core/playwright';
 import type { AxeFindingInfo } from '@ally/shared';
+import { CONFIRMATION_TEXT } from '../agent/confirm.js';
 import { internalsOf } from '../driver/internal.js';
 import type { DriverSession } from '../driver/types.js';
 import type { FixTarget } from '../runs/store.js';
@@ -45,8 +46,13 @@ async function resolveBackendNode(session: DriverSession, backendNodeId: number)
  * something the keyboard cannot reach. When the node the agent named (or the one
  * that merely had focus) is reachable, it cannot be the blocker, so the page is
  * searched for a clickable element with no keyboard path instead (F-82).
+ *
+ * With silentActivation (the agent pressed Enter or Space and nothing was
+ * announced) the target is a visible confirmation near the node that is not in a
+ * live region: the site answered on screen only (F-84). Exactly one, in the
+ * nearest enclosing element that has any, or no change to the target.
  */
-const INSPECT_FUNCTION = `function (preferOverlay, unreachable) {
+const INSPECT_FUNCTION = `function (preferOverlay, unreachable, silentActivation, confirmationSource) {
   var start = this.nodeType === 1 ? this : this.parentElement;
   if (!start) return null;
   function declaresPointer(el) {
@@ -122,6 +128,42 @@ const INSPECT_FUNCTION = `function (preferOverlay, unreachable) {
     if (found) target = found;
     container = container.parentElement;
   }
+  function inLiveRegion(el) {
+    for (var node = el; node && node.nodeType === 1; node = node.parentElement) {
+      var role = node.getAttribute('role');
+      if (role === 'status' || role === 'alert' || role === 'log' || node.tagName.toLowerCase() === 'output') return true;
+      var live = node.getAttribute('aria-live');
+      if (live === 'polite' || live === 'assertive') return true;
+    }
+    return false;
+  }
+  function ownText(el) {
+    return Array.prototype.filter.call(el.childNodes, function (c) { return c.nodeType === 3; })
+      .map(function (c) { return c.textContent; }).join(' ').replace(/\\s+/g, ' ').trim();
+  }
+  function silentConfirmation(from) {
+    var pattern = new RegExp(confirmationSource, 'i');
+    var scope = from;
+    for (var level = 0; scope && level < 4; level++) {
+      var found = Array.prototype.filter.call(scope.querySelectorAll('*'), function (el) {
+        if (el.getClientRects().length === 0 || inLiveRegion(el)) return false;
+        var text = ownText(el);
+        return text.length > 0 && text.length <= 300 && pattern.test(text);
+      });
+      if (found.length === 1) return found[0];
+      if (found.length > 1 || scope.tagName.toLowerCase() === 'body') return null;
+      scope = scope.parentElement;
+    }
+    return null;
+  }
+  var reason = null;
+  if (silentActivation && !preferOverlay && !unreachable) {
+    var silent = silentConfirmation(start);
+    if (silent) {
+      target = silent;
+      reason = 'This element shows the result of the action on screen ("' + ownText(silent).slice(0, 160) + '") but is not a live region, so a screen reader announced nothing when it appeared.';
+    }
+  }
   var isBody = start.tagName.toLowerCase() === 'body';
   if (unreachable && !(target && clickableButUnreachable(target))) {
     // Group the page's unreachable clickables by tag and class: one group is one source
@@ -151,7 +193,8 @@ const INSPECT_FUNCTION = `function (preferOverlay, unreachable) {
       className: target.getAttribute('class'),
       outerHtml: clip(target.outerHTML),
       domPath: domPath(target),
-      textContent: (target.textContent || '').trim().slice(0, 200)
+      textContent: (target.textContent || '').trim().slice(0, 200),
+      reason: reason
     }
   };
 }`;
@@ -176,10 +219,10 @@ async function bodyRef(session: DriverSession): Promise<ElementHandleRef | null>
 export async function inspectBlocker(
   session: DriverSession,
   backendNodeId: number | null,
-  options: { preferOverlay: boolean; unreachable: boolean },
+  options: { preferOverlay: boolean; unreachable: boolean; silentActivation?: boolean },
 ): Promise<BlockerDomFacts | null> {
   // With no node, an overlay or unreachable-control search can still start from the page body.
-  const searchesPage = options.preferOverlay || options.unreachable;
+  const searchesPage = options.preferOverlay || options.unreachable || options.silentActivation === true;
   const ref = backendNodeId !== null ? await resolveBackendNode(session, backendNodeId) : searchesPage ? await bodyRef(session) : null;
   if (!ref) return null;
   const { cdp } = internalsOf(session);
@@ -187,7 +230,12 @@ export async function inspectBlocker(
     const result = (await cdp.send('Runtime.callFunctionOn', {
       objectId: ref.objectId,
       functionDeclaration: INSPECT_FUNCTION,
-      arguments: [{ value: options.preferOverlay }, { value: options.unreachable }],
+      arguments: [
+        { value: options.preferOverlay },
+        { value: options.unreachable },
+        { value: options.silentActivation === true },
+        { value: CONFIRMATION_TEXT.source },
+      ],
       returnByValue: true,
     })) as { result: { value?: { node: { outerHtml: string; domPath: string }; target: FixTarget | null } | null } };
     const value = result.result.value;

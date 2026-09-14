@@ -1,6 +1,7 @@
 import { readFileSync } from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { LOCATE_CONFIDENCE_THRESHOLD } from '@ally/shared';
 import { describe, expect, it } from 'vitest';
 import { isPrivateAddress, assertPublicUrl } from '../../src/lib/url-guard.js';
 import { applyReplacement } from '../../src/patch/generate.js';
@@ -25,6 +26,24 @@ describe('locateElement (AST search)', () => {
     const original = readFileSync(path.join(shop, 'components/ProductCard.tsx'), 'utf8');
     const overrides = { 'components/ProductCard.tsx': original.replace('className="add"', 'className="add-button"') };
     expect(locateElement(shop, { tagName: 'div', className: 'add', outerHtml: '', domPath: '', textContent: '' }, overrides)).toBeNull();
+  });
+
+  it('F-85: a classless element with unique literal text is located above the threshold', () => {
+    const target = { tagName: 'button', className: null, outerHtml: '', domPath: '', textContent: 'Subscribe' };
+    const located = locateElement(shop, target);
+    expect(located).toMatchObject({ filePath: 'components/Newsletter.tsx', lineStart: 22, lineEnd: 22, candidates: 1 });
+    expect(located!.confidence).toBeGreaterThanOrEqual(LOCATE_CONFIDENCE_THRESHOLD);
+  });
+
+  it('F-85: a classless element with no text to corroborate it stays a weak identity', () => {
+    const located = locateElement(shop, { tagName: 'button', className: null, outerHtml: '', domPath: '', textContent: '' });
+    expect(located?.confidence).toBe(0.5);
+  });
+
+  it('F-85: computed text never excludes a candidate', () => {
+    // The status paragraph's text is a ternary: it cannot match, and must still be found by its class.
+    const located = locateElement(shop, { tagName: 'p', className: 'newsletter-status', outerHtml: '', domPath: '', textContent: 'Thanks, you are subscribed.' });
+    expect(located).toMatchObject({ filePath: 'components/Newsletter.tsx', lineStart: 24, confidence: 1, candidates: 1 });
   });
 
   it('returns null when nothing matches, rather than guessing', () => {

@@ -9,7 +9,7 @@
  * and none of their output reaches a prompt.
  */
 
-import type { BlockerInfo } from '@ally/shared';
+import type { BlockerCategory, BlockerInfo, StepInfo } from '@ally/shared';
 import { runGoal } from '../agent/loop.js';
 import { inspectBlocker, markOverlaps, runAxe } from '../baseline/axe.js';
 import { correlate } from '../baseline/correlate.js';
@@ -17,6 +17,7 @@ import type { Config } from '../config/index.js';
 import { bindAgentDriver, closeSession, openSession } from '../driver/session.js';
 import { currentUrl } from '../driver/index.js';
 import type { DriverSession } from '../driver/types.js';
+import { NOTHING_ANNOUNCED_LINE } from '../driver/serialize.js';
 import type { LlmProvider } from '../llm/provider.js';
 import { captureFrame, startFrameLoop } from '../preview/frames.js';
 import { isTerminal, type RunRecord, type RunStore } from './store.js';
@@ -36,6 +37,24 @@ function pathOf(url: string): string {
   } catch {
     return url;
   }
+}
+
+/** Categories where a result shown on screen but never announced can be the wall (F-84). */
+const SILENT_RESULT_CATEGORIES = new Set<BlockerCategory>(['STATE_NOT_ANNOUNCED', 'AMBIGUOUS_CONTROLS', 'UNKNOWN']);
+
+/** The agent pressed Enter or Space, and all it heard next was "nothing new was announced" (F-84). */
+export function silentActivation(steps: StepInfo[]): boolean {
+  const heardAt = new Map<number, string[]>();
+  for (const step of steps) {
+    if (step.transcript) heardAt.set(step.index, step.transcript.map((line) => line.spoken));
+  }
+  return steps.some((step) => {
+    if (step.toolName !== 'press_key' || typeof step.toolInput !== 'object' || step.toolInput === null) return false;
+    const key = 'key' in step.toolInput ? step.toolInput.key : null;
+    if (key !== 'Enter' && key !== 'Space') return false;
+    const next = heardAt.get(step.index + 1);
+    return next?.length === 1 && next[0] === NOTHING_ANNOUNCED_LINE;
+  });
 }
 
 function setFrame(record: RunRecord, jpeg: Buffer): void {
@@ -117,6 +136,7 @@ export async function executeRun(record: RunRecord, deps: RunnerDeps): Promise<v
       const facts = await inspectBlocker(session, blocker.backendNodeId, {
         preferOverlay: blocker.category === 'FOCUS_NOT_TRAPPED',
         unreachable: blocker.category === 'CONTENT_NOT_REACHABLE' || blocker.category === 'NO_KEYBOARD_PATH',
+        silentActivation: SILENT_RESULT_CATEGORIES.has(blocker.category) && silentActivation(result.steps),
       });
       record.blocker = {
         atStep: blocker.atStep,

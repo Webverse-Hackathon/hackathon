@@ -49,6 +49,9 @@ Rules:
   it when it opens. Everything must fit inside the replaced lines, so move focus with an inline ref callback
   (for example ref={(node) => { if (node && open && !node.contains(document.activeElement)) node.querySelector('button, a')?.focus(); }})
   rather than new hooks or imports.
+- A message that shows the result of an action (a confirmation, an error, a count) but is never announced gets
+  role="status" (role="alert" for an error) on the element that is always rendered, so the live region exists
+  before its text changes. Do not render the region only once the message appears.
 - Do not add dependencies, comments or unrelated changes. Keep the original indentation.
 - Call propose_patch exactly once.`;
 
@@ -82,6 +85,7 @@ export function buildPatchRequest(input: {
     '',
     `The element in the rendered page (${target.domPath}):`,
     target.outerHtml,
+    ...(target.reason ? [`Why this element: ${target.reason}`] : []),
     '',
     `File: ${located.filePath} (${lineCount} lines). The whole file, numbered:`,
     numbered(fileText, 1, lineCount),

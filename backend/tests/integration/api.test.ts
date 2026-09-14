@@ -40,6 +40,7 @@ function allText(request: ModelRequest): string {
 class DemoScript implements LlmProvider {
   private decisions = 0;
   private plusIconId = '';
+  private typed = 0;
 
   async narrate(): Promise<ModelResponse> {
     return respond([], 'I hear images but nothing that adds an item.');
@@ -47,6 +48,11 @@ class DemoScript implements LlmProvider {
 
   async decide(request: ModelRequest): Promise<ModelResponse> {
     const text = allText(request);
+    if (request.tools?.some((tool) => tool.name === 'propose_patch') && /newsletter-status/.test(text)) {
+      expect(text).toMatch(/Why this element: .*not a live region/);
+      const replacement = `      <p className="newsletter-status" role="status">{subscribed ? 'Thanks, you are subscribed. Your code is on its way.' : ''}</p>`;
+      return respond([{ name: 'propose_patch', input: { replacement, rationale: 'The confirmation is now a status message.' } }]);
+    }
     if (request.tools?.some((tool) => tool.name === 'propose_patch')) {
       const range = text.match(/Replace lines (\d+) to (\d+) inclusive/);
       expect(range).not.toBeNull();
@@ -59,6 +65,21 @@ class DemoScript implements LlmProvider {
     }
 
     this.decisions++;
+    // F-84: fill in the newsletter, press Subscribe, and judge only by what was announced.
+    if (/subscribe to the newsletter/.test(text)) {
+      const heard = text.slice(text.lastIndexOf('The screen reader just said:'));
+      const latest = heard.slice(0, heard.indexOf('</page_transcript>'));
+      const act = (name: string, input: Record<string, unknown>) =>
+        respond([{ name, input: { ...input, reasoning: 'newsletter', confidence: 0.8 } }]);
+      if (this.decisions === 1) return act('press_key', { key: 'Tab' });
+      if (/subscribed/.test(latest)) return act('declare_success', { evidence: 'It said I am subscribed.' });
+      if (latest.includes('nothing new was announced.') && this.decisions > 5) {
+        return act('declare_blocked', { category: 'STATE_NOT_ANNOUNCED', reason: 'I pressed Subscribe and nothing was announced.' });
+      }
+      if (/button, Subscribe\./.test(latest)) return act('press_key', { key: 'Enter' });
+      if (/\bedit\.\s*$/m.test(latest)) return act('type_text', { text: this.typed++ === 0 ? 'Test User' : 'test@example.com' });
+      return act('press_key', { key: 'Tab' });
+    }
     // F-82: tab to the footer, then blame nothing. Focus is on a link the keyboard reached.
     if (/reach the footer/.test(text)) {
       // What the screen reader just said, not the walked Tab order that follows it (F-83).
@@ -252,4 +273,32 @@ describe('demo API, real browser, scripted model', () => {
     expect(record.blocker?.accessibleName).toBe('Shipping');
     expect(record.fixTarget).toMatchObject({ tagName: 'div', className: 'add' });
   }, 180_000);
+
+  it('F-84: a confirmation shown but never announced is fixed with a live region, and the re-run subscribes', async () => {
+    const created = await app.inject({ method: 'POST', url: '/api/runs', payload: { url: BROKEN, goal: 'subscribe to the newsletter', stepBudget: 20 } });
+    const record = store.get(created.json().id)!;
+    await waitFor(() => (record.finishedAt ? record : undefined), 150_000);
+
+    expect(record.status).toBe('BLOCKED');
+    expect(record.blocker?.accessibleName).toBe('Subscribe');
+    expect(record.fixTarget).toMatchObject({ tagName: 'p', className: 'newsletter-status' });
+    expect(record.fixTarget?.reason).toMatch(/not a live region/);
+
+    expect((await app.inject({ method: 'POST', url: `/api/runs/${record.id}/fix` })).statusCode).toBe(202);
+    const outcome = await waitFor(() => {
+      const events = record.events.map((logged) => logged.event);
+      return events.find((event) => event.event === 'fix.failed' || event.event === 'fix.verifying');
+    }, 240_000);
+    expect(outcome.event === 'fix.failed' ? outcome.data.reason : null).toBeNull();
+
+    const located = record.events.map((logged) => logged.event).find((event): event is Extract<StreamEvent, { event: 'fix.located' }> => event.event === 'fix.located');
+    expect(located?.data).toMatchObject({ filePath: 'components/Newsletter.tsx', lineStart: 24, locateConfidence: 1 });
+    expect(record.patch?.validated).toBe(true);
+
+    const verify = store.get(record.verifyRunId!)!;
+    await waitFor(() => (verify.finishedAt ? verify : undefined), 150_000);
+    expect(verify.status).toBe('SUCCEEDED');
+    const verified = record.events.map((logged) => logged.event).find((event): event is Extract<StreamEvent, { event: 'fix.verified' }> => event.event === 'fix.verified');
+    expect(verified?.data.success).toBe(true);
+  }, 420_000);
 });

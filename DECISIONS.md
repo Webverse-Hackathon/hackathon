@@ -386,10 +386,32 @@ lives in the evidence string, shown on the live view. The report has no separate
 
 ---
 
+## 19 · A third planted blocker: the newsletter confirmation is not announced
+**2026-09-15 · accepted** · overrides the "do not add a third blocker" rule in `fixtures/broken-shop/README.md`, at the
+user's request
+
+**Context.** A live run of "subscribe to the newsletter" was blocked, and Fix stopped at locate. The newsletter was
+noise only: Subscribe had no handler, so no patch and no re-run could ever succeed. The user wants that goal to go
+through the whole flow: blocked, located, patched, gated, re-run, succeeded.
+
+**Decision.** Subscribe sets state, and `<p className="newsletter-status">` shows "Thanks, you are subscribed." with no
+live region: WCAG 4.1.3, `STATE_NOT_ANNOUNCED`. The fix is `role="status"` on that paragraph. The unlabelled inputs stay
+as axe noise. Tab order and the checkout blockers are unchanged.
+
+**Rejected.** Making the newsletter accessible outright: the goal would succeed with nothing to fix. Putting the
+confirmation where the button is: it would move focus and hide the barrier. Lowering
+`LOCATE_CONFIDENCE_THRESHOLD`: decision 7 gates AST search at 0.8, and the button was the wrong target anyway (F-84).
+
+**Consequence.** The fixture has three blockers. The checkout demo is untouched, but the demo freeze (F-51) now needs
+this change in it. Found by searching for a confirmation near the node, so Ally still cannot fix an unannounced result
+that is far from the control or worded outside `CONFIRMATION_TEXT`.
+
+---
+
 ## Template for the next entry
 
 ```md
-## 19 · Title
+## 20 · Title
 **YYYY-MM-DD · accepted**
 
 **Context.**

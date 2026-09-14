@@ -32,6 +32,26 @@ working, every time, even mid-task. Especially mid-task.
 
 Newest first. One entry per working session. Keep entries short and factual.
 
+### 2026-09-15 · Newsletter session
+
+**Did**
+- Live run `e907d2d4` "subscribe to the newsletter" was blocked at step 14 (`AMBIGUOUS_CONTROLS` from the loop detector)
+  and Fix stopped at locate, 50%, on `<button>Subscribe</button>`. Two causes: Subscribe did nothing at all, so no
+  patch could make the goal succeed (F-84), and a classless element could never pass 0.8 (F-85).
+- Fixture: Subscribe now works, and its confirmation is a plain `<p className="newsletter-status">` that is not
+  announced. Third planted blocker, DECISIONS.md #19. Mirrored into fixed-shop, style added to both.
+- `baseline/axe.ts` + `runs/execute.ts`: after a silent Enter or Space, the fix target is the nearby confirmation
+  that is outside a live region, with a `reason` quoted in the patch prompt. `patch/generate.ts` prompt rule for
+  status messages. `sourcemap/ast-search.ts`: literal JSX text narrows candidates (0.9 for a classless unique match).
+- Tests: 130 unit tests pass (new: `silent-activation.test.ts`, three F-85 locate cases, confirm X-10). Integration
+  "F-84" on real Chromium with a scripted model: blocked, located `Newsletter.tsx:24` at 1.0, gates pass, verify run
+  SUCCEEDED. Backend typecheck and lint clean.
+
+**Next session should**
+1. Restart `pnpm demo`, then run "subscribe to the newsletter" on 3100 with the real model and press Fix.
+2. The loop detector still labels this wall `AMBIGUOUS_CONTROLS`; consider `STATE_NOT_ANNOUNCED` when the repeated
+   state follows a silent activation.
+
 ### 2026-09-15 · Model switch session
 
 **Did**

@@ -715,6 +715,40 @@ site: `pnpm agent --url http://localhost:3101 --goal "add a shirt to the cart" -
 (Tab ×6, Enter, Shift+Tab to "Cart (1)", declare_success).
 **Status.** HIT, MITIGATED (model switch session, 2026-09-15).
 
+### F-84 · A result shown on screen but never announced is blamed on the button — High
+
+**Trigger.** A goal whose last action shows its result only visually, such as a newsletter confirmation in a plain
+`<p>`. The agent presses Enter, hears "nothing new was announced", and the loop detector or the model names the
+focused control.
+**Symptom.** Live run `e907d2d4`, 2026-09-15, "subscribe to the newsletter": BLOCKED at step 14 as
+`AMBIGUOUS_CONTROLS` on `<button type="button">Subscribe</button>`. Fix stopped at locate, 50%. Even past locate, a
+patch to the button could not help: in the fixture at the time Subscribe had no handler at all, so no re-run could
+succeed.
+**Mitigation.** The fixture's Subscribe now works and its confirmation is not a live region (DECISIONS.md #19).
+`runs/execute.ts` `silentActivation`: an Enter or Space followed only by "nothing new was announced", with category
+`STATE_NOT_ANNOUNCED`, `AMBIGUOUS_CONTROLS` or `UNKNOWN`, makes `inspectBlocker` look for a visible confirmation (the
+`CONFIRMATION_TEXT` pattern from `agent/confirm.ts`) outside any live region, in the nearest enclosing element that
+has one. Exactly one becomes the fix target, with a `reason` the patch prompt quotes. The patch prompt says a result
+message gets `role="status"` on the element that is always rendered. The blocker in the report stays what the agent
+perceived.
+**Test.** `backend/tests/unit/silent-activation.test.ts`; `backend/tests/unit/confirm.test.ts` X-10;
+`backend/tests/integration/api.test.ts` "F-84" (blocked, target `p.newsletter-status`, located at confidence 1, gates
+pass, verify run SUCCEEDED).
+**Status.** HIT, MITIGATED (newsletter session, 2026-09-15). The loop detector's category is still
+`AMBIGUOUS_CONTROLS` for this case; not changed.
+
+### F-85 · A unique classless element is never located with confidence — Medium
+
+**Trigger.** A fix target with no `class` attribute, such as `<button>Subscribe</button>` or `<a>Shipping</a>`.
+**Symptom.** "1 elements in the source could have rendered this, so we will not guess which one to patch." at 50%.
+`sourcemap/ast-search.ts` matched on tag and class only and capped a classless element at 0.5, so even a unique one
+could never pass the 0.8 gate. docs/07 lists literal text as the strongest signal; it was not implemented.
+**Mitigation.** Candidates whose literal JSX text equals the rendered text narrow the field. A classless element
+identified that way scores 0.9 divided by the remaining candidates; with no matching text it stays 0.5. Computed text
+(`{product.name}`, a ternary) never excludes a candidate.
+**Test.** `backend/tests/unit/patch.test.ts` "F-85" (three cases).
+**Status.** HIT, MITIGATED (newsletter session, 2026-09-15).
+
 ---
 
 ## Appendix · When you add an entry

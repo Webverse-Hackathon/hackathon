@@ -12,7 +12,7 @@ import type { StepInfo, TranscriptLine } from '@ally/shared';
 
 // Past tense and outcomes only. A bare "complete" would accept a heading such as
 // "Complete your order", which is the instruction, not the confirmation.
-const CONFIRMATION_TEXT =
+export const CONFIRMATION_TEXT =
   /\b(order (confirmed|placed|complete|received)|thank(s| you)|confirmed|success(ful|fully)?|completed|submitted|subscribed|booked|registered|has been (sent|placed|received|submitted))\b/i;
 
 const CONFIRMATION_URL = /(confirm|success|thank|complete|receipt|done|order-placed)/i;

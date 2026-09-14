@@ -8,7 +8,7 @@ element carries `data-ally-src`.
 **Expected outcome:** `BLOCKED` at step 5–9, category `UNLABELLED_CONTROL`,
 `blockerCaughtByAxe: false`
 
-## The two planted blockers
+## The planted blockers
 
 ### 1 · Unlabelled controls — `components/ProductCard.tsx`
 
@@ -45,6 +45,13 @@ What axe says: **nothing, at any severity.** There is no rule that says "focus m
 That second one is the cleanest possible illustration of the gap, and it is the line to say out loud
 on stage.
 
+### 3 · State not announced — `components/Newsletter.tsx` (DECISIONS.md #19)
+
+Subscribe works, and "Thanks, you are subscribed." appears on screen in `<p className="newsletter-status">`. That
+paragraph is not a live region, so after Enter the agent hears `nothing new was announced.` and cannot tell whether
+it subscribed. Goal: `subscribe to the newsletter`. The fix is `role="status"` on the paragraph (line 24).
+What axe says: **nothing about it**, only `label` on the two inputs beside it.
+
 ## Deliberate noise
 
 To make the axe comparison honest and unrehearsed-looking, the page also carries about a dozen
@@ -66,6 +73,6 @@ source plugin that stamps `data-ally-src` is Day 3 work; until then the flag has
 ## Rules for this directory
 
 - Do not fix the planted blockers here. `fixtures/fixed-shop` holds the after-state.
-- Do not add a third blocker. Two is enough to tell the story and a third makes the demo long.
+- Do not add a fourth blocker. The third (newsletter, DECISIONS.md #19) is its own goal and stays out of the checkout demo.
 - Freeze this repo twelve hours before the demo and tag it `demo-frozen`. No commits after that,
   by anyone, for any reason. See F-51 in `docs/09-FAILURE-MODES.md`.
