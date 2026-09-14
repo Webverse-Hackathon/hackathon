@@ -18,7 +18,11 @@ import {
 import type { JsonSchema, ModelToolCall, ToolDefinition } from '../llm/provider.js';
 
 const commonProperties: JsonSchema = {
-  reasoning: { type: 'string', description: 'One sentence: why this is the right next action.' },
+  reasoning: {
+    type: 'string',
+    description:
+      'One first-person sentence, spoken aloud to a listener: why this is the right next action. Describe only what you heard, never how anything looks.',
+  },
   confidence: { type: 'number', description: 'Your confidence in this action, from 0 to 1.' },
 };
 

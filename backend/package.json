@@ -15,7 +15,9 @@
     "test:purity": "vitest run tests/unit/purity.test.ts",
     "test:integration": "vitest run tests/integration --testTimeout=180000",
     "test:e2e": "vitest run tests/e2e --testTimeout=300000",
-    "prisma": "prisma"
+    "prisma": "prisma",
+    "demo": "tsx src/api/server.ts",
+    "start:api": "tsx src/api/server.ts"
   },
   "dependencies": {
     "@ally/shared": "workspace:*",

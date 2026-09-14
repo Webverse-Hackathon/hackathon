@@ -17,7 +17,7 @@ import { LlmError, addUsage, emptyUsage, type LlmProvider, type ModelUsage } fro
 import { CATEGORY_WCAG, IMMEDIATE_BLOCK_CATEGORIES, MIN_STEPS_BEFORE_BLOCKED } from './categories.js';
 import { confirmSuccess } from './confirm.js';
 import { LoopDetector } from './loop-detect.js';
-import { narrateStep } from './narrate.js';
+import { narrateStep, narrationFromReasoning } from './narrate.js';
 import { buildDecisionRequest, type HistoryTurn } from './prompts.js';
 import { parseToolCall, type ParsedDecision } from './tools.js';
 
@@ -36,6 +36,12 @@ export interface RunGoalOptions {
   maxTranscriptLines?: number;
   runTimeoutMs?: number;
   onEvent?: (event: StreamEvent) => void;
+  /**
+   * 'model' (default): a separate narration call per step. 'decision': speak the
+   * decision's own reasoning instead, one model call per step, for providers with
+   * tight request caps (DECISIONS.md #15).
+   */
+  narration?: 'model' | 'decision';
 }
 
 export interface AgentBlocker {
@@ -208,10 +214,13 @@ export async function runGoal(options: RunGoalOptions): Promise<RunResult> {
       }
 
       // 2. NARRATE (best-effort; never blocks the run)
-      const narration = await narrateStep(llm, goal, transcript);
-      recordUsage(narration.model, narration.usage);
-      stepInfo.narration = narration.text;
-      emit({ event: 'step.narration', data: { index: step, text: narration.text } });
+      const narrateWithModel = (options.narration ?? 'model') === 'model';
+      if (narrateWithModel) {
+        const narration = await narrateStep(llm, goal, transcript);
+        recordUsage(narration.model, narration.usage);
+        stepInfo.narration = narration.text;
+        emit({ event: 'step.narration', data: { index: step, text: narration.text } });
+      }
 
       // 3. DETECT A LOOP before spending a decision call. Only a state reached by
       // acting counts: when the previous step produced no action (an unusable
@@ -259,6 +268,11 @@ export async function runGoal(options: RunGoalOptions): Promise<RunResult> {
 
       const decision = parsed.decision;
       const { tool } = decision;
+      if (!narrateWithModel) {
+        // Emitted before step.decision, so the documented event order holds in both modes.
+        stepInfo.narration = narrationFromReasoning(decision.reasoning, transcript);
+        emit({ event: 'step.narration', data: { index: step, text: stepInfo.narration } });
+      }
       stepInfo.kind = 'DECISION';
       stepInfo.toolName = tool.tool;
       stepInfo.toolInput = tool.input;

@@ -1,0 +1,24 @@
+{
+  "name": "@ally/fixture-fixed-shop",
+  "version": "0.1.0",
+  "private": true,
+  "description": "The verify site: broken-shop with Ally's validated patches applied, served on 3101.",
+  "scripts": {
+    "dev": "next dev -p 3101",
+    "build": "next build",
+    "start": "next start -p 3101",
+    "typecheck": "next typegen && tsc --noEmit",
+    "demo": "next dev -p 3101"
+  },
+  "dependencies": {
+    "next": "^15.1.0",
+    "react": "^19.0.0",
+    "react-dom": "^19.0.0"
+  },
+  "devDependencies": {
+    "@types/node": "^22.10.0",
+    "@types/react": "^19.0.0",
+    "@types/react-dom": "^19.0.0",
+    "typescript": "^5.7.0"
+  }
+}

@@ -134,6 +134,31 @@ importers:
         specifier: ^5.7.0
         version: 5.9.3
 
+  fixtures/fixed-shop:
+    dependencies:
+      next:
+        specifier: ^15.1.0
+        version: 15.5.25(@playwright/test@1.63.0)(@types/node@22.20.2)(react-dom@19.3.0(react@19.3.0))(react@19.3.0)
+      react:
+        specifier: ^19.0.0
+        version: 19.3.0
+      react-dom:
+        specifier: ^19.0.0
+        version: 19.3.0(react@19.3.0)
+    devDependencies:
+      '@types/node':
+        specifier: ^22.10.0
+        version: 22.20.2
+      '@types/react':
+        specifier: ^19.0.0
+        version: 19.3.0
+      '@types/react-dom':
+        specifier: ^19.0.0
+        version: 19.3.0(@types/react@19.3.0)
+      typescript:
+        specifier: ^5.7.0
+        version: 5.9.3
+
   frontend:
     dependencies:
       '@ally/shared':

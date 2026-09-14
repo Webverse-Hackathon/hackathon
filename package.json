@@ -24,7 +24,8 @@
     "db:studio": "pnpm --filter @ally/backend prisma studio",
     "docker:up": "docker compose up -d postgres redis",
     "docker:all": "docker compose up --build",
-    "preflight": "node infra/scripts/preflight.mjs"
+    "preflight": "node infra/scripts/preflight.mjs",
+    "demo": "pnpm --parallel --filter @ally/fixture-broken-shop --filter @ally/fixture-fixed-shop --filter @ally/backend --filter @ally/frontend run demo"
   },
   "devDependencies": {
     "@eslint/js": "^9.39.5",

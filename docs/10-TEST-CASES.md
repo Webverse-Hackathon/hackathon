@@ -175,6 +175,13 @@ recorded AX session used by the unit golden tests and the purity suite is
 `backend/tests/fixtures/broken-shop/home-tab-cart.json`; re-record it with
 `backend/tests/tools/record-session.ts` whenever the fixture changes.
 
+**Where the demo build stands.** `backend/tests/integration/api.test.ts` runs the whole API in-process
+(DECISIONS.md #13) against broken-shop on 3100 and fixed-shop on 3101 with a scripted model. It covers the
+spirit of I-01 (scripted), I-03 (findings keyed by selector, no `backendNodeId`), I-04, I-05, and I-11
+without the pull request (locate to `ProductCard.tsx:43–45`, all five gates, verify re-run). Unit tests
+`correlate.test.ts` and `patch.test.ts` cover the verdict sentence, the diff, AST search and the URL guard.
+Both fixture dev servers must be running for the integration file.
+
 `backend/tests/integration/`. Real Chromium, real fixture sites, the model replaced by a recorded
 transcript so they are deterministic and free.
 
@@ -253,6 +260,10 @@ whose pull request was closed externally. A barrier report whose run errored.
 | 2026-09-14 | F-67 | The CI purity step called a `vitest` script that does not exist, so the suite never ran | `pnpm --filter @ally/backend test:purity`, used by `ci.yml` | uncommitted |
 | 2026-09-14 | F-13 | The confirmation pattern accepted a bare "complete", so a heading "Complete your order" would have confirmed success | `backend/tests/unit/confirm.test.ts` "an instruction heading such as Complete your order is not confirmation" | uncommitted |
 | 2026-09-14 | — | `backend/tsconfig.json` set `rootDir: src` while including `tests/`, so the backend could never typecheck | `pnpm --filter @ally/backend typecheck` | uncommitted |
+| 2026-09-14 | F-73 | An inherited `cursor: pointer` made the icon inside `div.add` the fix target, so locate failed | `backend/tests/integration/api.test.ts` "runs to a blocker" asserts `fixTarget.className === 'add'` | uncommitted |
+| 2026-09-14 | F-75 | Our live view's nested transcript scroll box failed axe `scrollable-region-focusable` | Playwright axe scan of `/live/[id]` (D-01), by hand | uncommitted |
+| 2026-09-14 | — | The live view never showed a frame for a run that ended quickly: a cancelled frame poll advanced the sequence and discarded the image | Playwright load of an errored run's `/live/[id]`, three reloads, frame shown each time (by hand) | uncommitted |
+| 2026-09-14 | F-80 | NIM's problem-details errors lost their message, and a server refusing `tool_choice: required` would have failed every decision | `backend/tests/unit/openai-compatible.test.ts` "falls back to tool_choice auto once when a server rejects required" | uncommitted |
 
 ---
 

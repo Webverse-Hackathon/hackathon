@@ -59,6 +59,24 @@ describe('runGoal on the recorded broken-shop session', () => {
     expect(events.map((event) => event.event)).toEqual(['step.perception', 'step.narration', 'step.decision', 'step.action']);
   });
 
+  it('narration "decision" makes one model call per step and speaks the guarded reasoning, in the same event order', async () => {
+    const provider = new ScriptedProvider([press('Tab'), press('Tab')]);
+    const events: StreamEvent[] = [];
+    await runGoal({
+      goal: 'complete checkout',
+      stepBudget: 2,
+      driver: new ReplayDriver(recording.snapshots),
+      llm: provider,
+      narration: 'decision',
+      onEvent: (event) => events.push(event),
+    });
+    expect(provider.requests.filter((request) => request.kind === 'narrate')).toHaveLength(0);
+    expect(provider.requests.filter((request) => request.kind === 'decide')).toHaveLength(2);
+    expect(events.slice(0, 4).map((event) => event.event)).toEqual(['step.perception', 'step.narration', 'step.decision', 'step.action']);
+    // ScriptedProvider's reasoning is "scripted": no forbidden words, so it is spoken as is.
+    expect(events.find((event) => event.event === 'step.narration')).toMatchObject({ data: { index: 1, text: 'scripted' } });
+  });
+
   it('I-07 the step budget is honoured: a 3-step budget yields ABANDONED', async () => {
     const { result } = run([], 3);
     const outcome = await result;

@@ -8,7 +8,11 @@
  * With thinking on, forced tool_choice is not allowed, so we use `auto`, a
  * system instruction to always call exactly one tool, and strict tool schemas.
  *
- * narrate → Claude Haiku 4.5, a little sampling, a short answer.
+ * narrate → Claude Haiku 4.5 by default, a short answer. No sampling parameters:
+ * Opus 4.7+ reject `temperature` too, and a gateway may only serve those (F-72).
+ *
+ * Models are config, so the same shapes also run Opus 5 (decide) and Opus 4.8
+ * (narrate, no thinking by default) through a gateway (DECISIONS.md #12).
  */
 
 import Anthropic from '@anthropic-ai/sdk';
@@ -24,6 +28,8 @@ export type DecideEffort = 'low' | 'medium' | 'high' | 'xhigh' | 'max';
 
 export interface AnthropicProviderOptions {
   apiKey: string;
+  /** An Anthropic-compatible gateway. Undefined means api.anthropic.com. DECISIONS.md #12. */
+  baseURL?: string;
   decideModel: string;
   narrateModel: string;
   decideEffort: DecideEffort;
@@ -88,7 +94,9 @@ function toResponse(message: Anthropic.Message, startedAt: number): ModelRespons
 function translateError(error: unknown): never {
   if (error instanceof LlmError) throw error;
   if (error instanceof Anthropic.AuthenticationError || error instanceof Anthropic.PermissionDeniedError) {
-    throw new LlmError('The Anthropic API key was rejected.', 'AUTH', error);
+    // A gateway may refuse for reasons other than a bad key (F-77), so pass its own words through.
+    const detail = (error.error as { error?: { message?: string } } | undefined)?.error?.message ?? error.message;
+    throw new LlmError(`The model provider refused the credentials: ${detail}`, 'AUTH', error);
   }
   if (error instanceof Anthropic.RateLimitError) {
     throw new LlmError('The model provider is rate limiting requests.', 'RATE_LIMITED', error);
@@ -108,6 +116,9 @@ function translateError(error: unknown): never {
 export function createAnthropicProvider(options: AnthropicProviderOptions): LlmProvider {
   const client = new Anthropic({
     apiKey: options.apiKey,
+    // Always passed, even when undefined, so a stray ANTHROPIC_BASE_URL in the shell cannot redirect
+    // traffic without going through config.
+    baseURL: options.baseURL ?? 'https://api.anthropic.com',
     timeout: options.timeoutMs,
     maxRetries: options.maxRetries,
   });
@@ -138,7 +149,6 @@ export function createAnthropicProvider(options: AnthropicProviderOptions): LlmP
         const message = await client.messages.create({
           model: options.narrateModel,
           max_tokens: request.maxTokens,
-          temperature: 0.3,
           system: toSystem(request.system),
           messages: toMessages(request),
         });

@@ -9,20 +9,20 @@ working, every time, even mid-task. Especially mid-task.
 
 | | |
 |---|---|
-| **Submission deadline** | _TBD — fill this in_ |
-| **Current day** | Day 1 built; its live-model gate is pending an API key |
-| **Demo status** | CLI runs against broken-shop; not yet run with a real model |
-| **Blocking issue** | `ANTHROPIC_API_KEY` in `.env` is still the placeholder, so the Day 1 gate cannot be run |
-| **Last updated** | 2026-09-14 by the Phase 1 build session |
+| **Submission deadline** | 15 Sept, 2026 |
+| **Current day** | Demo build (Days 2–3 compressed, DECISIONS.md #13); demo is 2026-09-15 |
+| **Demo status** | First real-model run passed the gate: BLOCKED at step 9, UNLABELLED_CONTROL, honest verdict. Slow (5.4 min) on free endpoints; Fix not yet run with a real model |
+| **Blocking issue** | None blocking. OpenRouter key works (probe passed through the fallback list). Next: restart `pnpm demo` and do the first real run; 50 free requests a day (F-78) |
+| **Last updated** | 2026-09-14 by the demo build session |
 
 ## Milestone board
 
 | Milestone | Definition of done | Status |
 |---|---|---|
 | M0 Setup | Repo, docs, workspace, tooling on every machine | 🟢 done on the primary machine (solo for now); GitHub App deferred to Day 3 |
-| M1 Premise proven | CLI prints a transcript and a real blocker on `broken-shop` | 🟡 everything built and tested with a scripted model and real Chromium; live-model run pending the API key |
-| M2 System | Submit in the browser, watch the narration stream, see a blocker card | ⬜ not started |
-| M3 Loop closed | Fix opens a real pull request, verify run succeeds | ⬜ not started |
+| M1 Premise proven | CLI prints a transcript and a real blocker on `broken-shop` | 🟢 real model (OpenRouter free) blocked at step 9 with `UNLABELLED_CONTROL`, from the dashboard |
+| M2 System | Submit in the browser, watch the narration stream, see a blocker card | 🟡 done in-memory (#13) with a scripted model; real model pending the key |
+| M3 Loop closed | Fix opens a real pull request, verify run succeeds | 🟡 locate, patch, five gates and verify work (scripted); PR code untested without a repo and token |
 | M4 Hardened | Replay works offline, golden fixtures pass, dogfood green | ⬜ not started |
 | M5 Shipped | Deployed, rehearsed three times, frozen | ⬜ not started |
 
@@ -31,6 +31,88 @@ working, every time, even mid-task. Especially mid-task.
 ## Session log
 
 Newest first. One entry per working session. Keep entries short and factual.
+
+### 2026-09-14 · Demo build session
+
+**Did**
+- Switched the model to Kimi K3 on NVIDIA NIM's free trial (DECISIONS.md #16, F-80). The adapter now reads NIM
+  error details and falls back to `tool_choice: auto`. `.env` points at NIM; the `nvapi-` key still has to be
+  pasted into `ALLY_OPENAI_COMPAT_API_KEY` by hand, then probed with `pnpm agent`. Rollback line kept in `.env`.
+- Judging is 50% concept and architecture, 30% working prototype and UI, 20% Q&A, with a live online demo on
+  2026-09-15. Built the demo path as one in-memory process instead of Days 2–5 as written (DECISIONS.md #13).
+- `backend/src/api/server.ts` (Fastify: runs, report, SSE with `Last-Event-ID` replay, frame, fix, rerun,
+  config, health), `runs/` (store, executor, queue), `preview/frames.ts`, `baseline/` (axe at both phases,
+  blocker inspection, `correlate.ts`, causal map), `sourcemap/ast-search.ts`, `patch/` (generate, five gates:
+  applies, parses, `tsc`, jsx-a11y strict on changed lines, size), `github/pull-request.ts` (token-based),
+  `fix/` (orchestration, verify site sync), `lib/url-guard.ts` (F-01, partial).
+- `fixtures/fixed-shop`: a copy of broken-shop on 3101 that patches are written into for the verify run.
+- `frontend/`: landing with the run form and "how it works"; `/live/[runId]` split screen (frames left, heard
+  transcript, agent narration and decisions right, two voices, live region, verdict, fix progress, diff,
+  gates); `/run/[runId]` server-rendered report. Hand-written CSS, no Tailwind.
+- Shared contract: `ServerConfig`, report fields `source`/`parentRunId`/`errorMessage`/`fixable`, `fix.stage`
+  `skipped` + `detail`, error codes `MODEL_NOT_CONFIGURED` and `FIX_IN_PROGRESS`, health `absent`.
+- `pnpm demo` starts broken-shop (3100), fixed-shop (3101), the API (4000) and the dashboard (3000).
+- Tests: 94 backend unit tests (new: `correlate.test.ts`, `patch.test.ts`), `integration/api.test.ts` 4/4 on
+  real Chromium with a scripted model, backend and frontend typecheck and lint clean. Playwright walk of the
+  whole flow with axe: 0 violations on `/`, `/live/[id]` and `/run/[id]`.
+- Failure modes F-73 to F-76 added; F-01 and F-07 statuses updated.
+
+**Decided**
+- #13: one process, runs in memory, frames from the agent's own page, AST search as the only source strategy.
+
+**Bugs found and fixed**
+- F-73 inherited `cursor: pointer` picked the icon as the fix target. F-75 our own live view failed axe.
+
+**Did not do**
+- Any run with a real model (no key). The overlay fix path for `FOCUS_NOT_TRAPPED` (F-74) is untested.
+- A real pull request: needs `GITHUB_TOKEN` and `GITHUB_REPO` pointing at a repo that holds the fixture.
+- Nothing committed or pushed. The demo script (F-68) still quotes an imagined transcript.
+
+**Next session should**
+1. Put the OpenRouter key in `ALLY_OPENAI_COMPAT_API_KEY` in `.env`, run the probe (2 requests), restart
+   `pnpm demo`, and do one full run from the browser. Mind the 50-requests-a-day cap (F-78).
+2. Rehearse Fix twice: after the add-button fix the verify run will likely hit the cart dialog. Check the
+   overlay fix (F-74) and whether a second Fix on the verify run reaches "Goal completed".
+3. Rewrite the demo script beat from the real run (F-68), then commit and freeze.
+
+**Provider switch (same session, later)**
+- Agent Router answers every request with 401 `unauthorized client detected` (F-77); not worked around.
+- Added `llm/openai-compatible.ts` and `llm/factory.ts` (`ALLY_LLM_PROVIDER`), `ALLY_NARRATION=decision` (one call per step), free models priced at a known zero. `.env` set to OpenRouter with `nvidia/nemotron-3-ultra-550b-a55b:free`; key still empty. 101 unit tests pass.
+- Free tier cap: 50 requests a day (F-78). Probe first with 2 requests, then one full rehearsal.
+- Also fixed: the live view dropped the only frame of a run that ended quickly.
+- First real run (run 226588e0): BLOCKED at step 9, UNLABELLED_CONTROL, "14 violations, zero of them the reason". The agent opened the cart at step 6 and heard nothing new (blocker 2), then concluded on blocker 1. 322 s total; step 5 took 58 s and step 6 116 s waiting on overloaded free endpoints, so `ALLY_STEP_TIMEOUT_MS` is now 25000 (fail over sooner) and each run logs which models served.
+- Probe with the real key: Nvidia free endpoints overloaded, Gemma 429, Super wrote its tool call as text (F-79). Added a cross-provider fallback list and text tool-call recovery; the list then returned a valid `press_key` in 4.5 s. 6 of 50 daily requests used. 103 unit tests pass.
+
+**Known debt added**
+- Runs vanish on restart; one crashed browser can take down the API; no rate limit; no auth; the PR path uses a
+  token rather than the GitHub App.
+
+### 2026-09-14 · Phase 1 merge-check session
+
+**Did**
+- Fast-forwarded `main` to `origin/phase1` (`51cc81b`). Kept the submission deadline (15 Sept 2026).
+- Re-checked Phase 1 on a second machine (Windows 11, Node 22.16, pnpm 11.23): `pnpm install
+  --frozen-lockfile` clean; `shared` and `backend` typecheck and lint clean; 16 shared tests, 80 backend
+  unit tests and the purity suite (6) pass; integration (3) passes against real Chromium.
+- Checked by hand: `driver/index.ts` exports exactly the five functions; only `llm/anthropic.ts`
+  imports the SDK; no screenshot, click, evaluate or `any` in `agent/` or `driver/`; `ci.yml` calls
+  `test:purity`; both planted blockers are in the fixture.
+- Added F-70 (fixture `standalone` build fails with EPERM on Windows) and F-71 (integration suite
+  cannot spawn `pnpm` on Windows; Chromium must be installed per machine).
+- No Anthropic account key exists. Added optional `ANTHROPIC_BASE_URL` (config, adapter, CLI, `.env.example`,
+  one config test; 81 unit tests pass) so the gate can run through Agent Router. `DECISIONS.md` #12, proposed
+  until a probe confirms the gateway accepts adaptive thinking, effort, strict tools and caching.
+- Agent Router serves only Opus among Claude models. `.env` set to decide `claude-opus-5`, narrate
+  `claude-opus-4-8`. Removed `temperature` from `narrate` (both reject it, F-72); added Opus 4.8 to
+  `llm/cost.ts`. 82 unit tests pass.
+
+**Did not do**
+- The live-model gate: there is no `.env` on this machine.
+- Did not push `main`, and did not fix F-70 or F-71.
+
+**Next session should**
+1. Same as the Phase 1 entry below: add a real key, run the gate, compare categories across three runs.
+2. On Windows, turn on Developer Mode or serve the fixture with `next dev -p 3100` (F-70).
 
 ### 2026-09-14 · Phase 1 build session
 

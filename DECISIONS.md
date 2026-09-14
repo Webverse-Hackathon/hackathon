@@ -222,10 +222,124 @@ Prompt caching is expressed as a `cache` flag on a block, which a provider witho
 
 ---
 
+## 12 · Model calls may go through an Anthropic-compatible gateway
+**2026-09-14 · proposed** · the probe failed for Agent Router (F-77); the base-URL mechanism stays
+
+**Context.** The team has no Anthropic account key, so the Day 1 gate cannot run. A key for a
+third-party router (Agent Router) is available.
+
+**Decision.** `ANTHROPIC_BASE_URL` in config, validated as a URL and passed explicitly to the SDK
+client in `llm/anthropic.ts`. Empty means `api.anthropic.com`. The adapter always passes a base URL,
+so a stray shell variable cannot redirect traffic around config. The CLI prints which host it is using.
+
+**Rejected.** A new OpenAI-format adapter: more code, and only needed if the gateway cannot speak the
+Anthropic Messages API. Relying on the SDK's implicit `ANTHROPIC_BASE_URL` read: invisible in config.
+
+**Models.** Agent Router serves no Sonnet or Haiku, so through it: decide `claude-opus-5` (adaptive
+thinking by default, effort `low`) and narrate `claude-opus-4-8` (no thinking unless asked, so narration
+stays quick). Both are $5/$25 per million tokens: about 2.5x Sonnet 5 on decide and 5x Haiku on narrate.
+Both reject `temperature`, so narrate sends no sampling parameters on any model (F-72). The defaults in
+config stay as #3 for the official API; the gateway models are set in `.env`.
+
+**Consequence.** Accepted only if the gateway handles everything `decide` sends: adaptive thinking,
+`output_config.effort`, strict tools with `disable_parallel_tool_use`, and `cache_control`. Model names
+must be ones the gateway serves. Prompts, including page text, go to that third party. Costs in
+`llm/cost.ts` assume Anthropic prices and may not match the gateway's bill.
+
+---
+
+## 13 · Demo build: one process, runs in memory, no Postgres, Redis or BullMQ
+**2026-09-14 · accepted** · departs from docs/01 (worker, queue, Postgres) and #8 (deploy)
+
+**Context.** The live demo is an online meeting on 2026-09-15, the day after Phase 1 landed, and Days
+2 to 5 were not started. The rubric weights concept and architecture 50%, and the working prototype and
+its design 30%. Four days of roadmap do not fit in one.
+
+**Decision.** For the demo, `backend/src/api/server.ts` is a single Fastify process that also runs the
+agent (`backend/src/runs/`). Runs, their event logs and their reports live in memory, and the SSE stream
+replays from that log with `Last-Event-ID`. The left panel shows JPEG frames from the agent's own browser
+session (`backend/src/preview/`), fetched by the UI from a separate endpoint and never passed to
+`agent/`. axe runs at load and at the stopping point, and the correlation is computed, not scripted. The
+fix flow maps the blocker to JSX by AST search, has the decision model write the patch, runs the gates,
+and verifies against a patched copy in `fixtures/fixed-shop`. Presented on a local machine by screen share.
+
+**Rejected.** Building the documented architecture partially: a half-wired queue demos worse than a
+working single process. Scripting the transcript or the verdict: that would be the demo lie the purity
+suite exists to prevent.
+
+**Consequence.** Runs vanish on restart, there is no horizontal scale, and a crashed browser can take
+down the API. The documented architecture stays the answer to "how does this scale" in Q&A and is still
+the post-hackathon plan. Known debt, recorded in `PROGRESS.md`.
+
+---
+
+## 14 · The demo's pull requests use a token, not the GitHub App
+**2026-09-14 · accepted** · departs from docs/01 security boundaries ("never a personal access token")
+
+**Context.** The GitHub App does not exist and cannot be created and installed before the demo.
+
+**Decision.** `github/pull-request.ts` uses Octokit with `GITHUB_TOKEN` and `GITHUB_REPO` from `.env`,
+one commit per fix lineage, and refuses to push when the repository's file differs from the code that was
+tested. Without both settings the PR stage is reported as skipped and the validated diff is shown instead.
+
+**Rejected.** Faking a pull request in the UI. Skipping the stage silently.
+
+**Consequence.** A token scoped by its owner, not by installation. Replace with App auth after the hackathon.
+
+---
+
+## 15 · Free OpenRouter models through an OpenAI-compatible adapter, one call per step
+**2026-09-14 · accepted** · refines #3 and #12
+
+**Context.** Agent Router refuses Ally as a client (F-77). The team wants free models. OpenRouter's free
+variants allow 20 requests per minute and 50 per day (1000 once $10 of credits has been bought, F-78). Groq's
+free tier allows 8K tokens per minute on its tool-capable models, less than two decision requests.
+
+**Decision.** `llm/openai-compatible.ts` (fetch, no SDK) behind `ALLY_LLM_PROVIDER=openai-compatible`, built by
+`llm/factory.ts`. Decide with `nvidia/nemotron-3-ultra-550b-a55b:free` (tools and reasoning, 1M context), with
+`nvidia/nemotron-3-super-120b-a12b:free` as the fallback if it is slow or unavailable. `tool_choice: required`,
+reasoning effort low. `ALLY_NARRATION=decision` speaks the decision's reasoning through the same F-18 guard, so a
+step costs one request instead of two; the event order is unchanged. Anthropic stays the default.
+
+**Rejected.** Groq (token-per-minute cap). `openrouter/free`, which routes to a different model per request and
+would make runs disagree (F-12). Impersonating an approved client on Agent Router.
+
+**Update, same day.** The live probe found both Nvidia free endpoints overloaded and Gemma rate limited (F-79). The decision setting is now a fallback list across providers, `nvidia/nemotron-3-super-120b-a12b:free,google/gemma-4-31b-it:free,nex-agi/nex-n2.5-pro:free`, and tool calls written as text are recovered.
+
+**Consequence.** Weaker, slower tool calling than Claude, and free endpoints can queue or disappear. Narration
+describes intent ("I move on because…") rather than what was heard. A full demo (run, fix, verify) is roughly 30
+requests, so the 50-per-day cap allows about one rehearsal. Chosen models are unverified until the probe runs.
+
+---
+
+## 16 · Kimi K3 on NVIDIA NIM's free trial endpoint
+**2026-09-14 · accepted** · supersedes the model and host choice in #15; the adapter and one-call-per-step stay
+
+**Context.** OpenRouter's free tier allows 50 requests a day (F-78), about one rehearsal, and its free Nemotron
+endpoints were overloaded on the live probe (F-79). A first real run took 5.4 minutes. NVIDIA's hosted catalog
+(build.nvidia.com) serves `moonshotai/kimi-k3` free: about 1M context, function calling, structured output,
+reasoning effort low, high or max. The trial is limited to about 40 requests a minute per key across all models, with no
+daily cap published.
+
+**Decision.** `ALLY_OPENAI_COMPAT_BASE_URL=https://integrate.api.nvidia.com/v1`, decide and narrate
+`moonshotai/kimi-k3`, reasoning effort `low`, `ALLY_NARRATION=decision`, step timeout 60 s for a thinking model.
+There is one model, not a fallback list: NIM has no server-side router, and one model keeps runs consistent (F-12).
+The adapter reads NIM's problem-details errors and downgrades `tool_choice` to `auto` if `required` is refused (F-80).
+
+**Rejected.** Staying on OpenRouter free (daily cap). Kimi K3 through Moonshot or OpenRouter paid ($3 input and $15
+output per million tokens): about $0.30 to $0.60 per full demo, fine later, but it needs billing set up tonight.
+
+**Consequence.** It costs $0 but falls under the NVIDIA API Trial Terms: prototyping and evaluation, not production,
+so it is fine for the demo and must be replaced before real users. Prompts, including page text, go to NVIDIA.
+`llm/cost.ts` has no price for `moonshotai/kimi-k3`, so a run's cost shows as unknown rather than a false zero. A
+40-per-minute limit shared by the key caps the number of runs at once. Unverified until the probe runs with the key.
+
+---
+
 ## Template for the next entry
 
 ```md
-## 12 · Title
+## 17 · Title
 **YYYY-MM-DD · accepted**
 
 **Context.**

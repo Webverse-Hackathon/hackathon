@@ -15,7 +15,7 @@ import { RunStatusSchema, type StreamEvent } from '@ally/shared';
 import { runGoal, type RunResult } from '../agent/loop.js';
 import { loadConfig, loadDotEnv } from '../config/index.js';
 import { bindAgentDriver, closeSession, openSession } from '../driver/session.js';
-import { createAnthropicProvider } from '../llm/anthropic.js';
+import { createLlmProvider, missingModelConfig, providerHost } from '../llm/factory.js';
 import { formatUsd } from '../llm/cost.js';
 
 const color = {
@@ -122,23 +122,15 @@ async function main(): Promise<void> {
   } catch (error) {
     usage(error instanceof Error ? error.message : String(error));
   }
-  if (!config.ANTHROPIC_API_KEY) {
-    usage('ANTHROPIC_API_KEY is not set. Put it in the repository .env (see .env.example).');
-  }
+  const missing = missingModelConfig(config);
+  if (missing) usage(missing);
   const budget = values.budget === undefined ? config.ALLY_STEP_BUDGET : Number(values.budget);
   if (!Number.isInteger(budget) || budget < 1 || budget > 50) usage('--budget must be an integer from 1 to 50.');
 
-  const llm = createAnthropicProvider({
-    apiKey: config.ANTHROPIC_API_KEY,
-    decideModel: config.ALLY_MODEL_DECIDE,
-    narrateModel: config.ALLY_MODEL_NARRATE,
-    decideEffort: config.ALLY_DECIDE_EFFORT,
-    timeoutMs: config.ALLY_STEP_TIMEOUT_MS,
-    maxRetries: 3,
-  });
+  const llm = createLlmProvider(config);
 
   console.log(color.bold(`Ally · ${values.goal}`));
-  console.log(color.dim(`${values.url} · budget ${budget} · decide ${config.ALLY_MODEL_DECIDE} · narrate ${config.ALLY_MODEL_NARRATE}`));
+  console.log(color.dim(`${values.url} · budget ${budget} · decide ${config.ALLY_MODEL_DECIDE} · narrate ${config.ALLY_MODEL_NARRATE} · via ${providerHost(config)} · narration ${config.ALLY_NARRATION}`));
 
   const session = await openSession(values.url, { headless: values.headed ? false : config.PLAYWRIGHT_HEADLESS });
   let result: RunResult;
@@ -150,6 +142,7 @@ async function main(): Promise<void> {
       llm,
       maxTranscriptLines: config.ALLY_TRANSCRIPT_MAX_LINES,
       runTimeoutMs: config.ALLY_RUN_TIMEOUT_MS,
+      narration: config.ALLY_NARRATION,
       onEvent: printEvent,
     });
   } finally {

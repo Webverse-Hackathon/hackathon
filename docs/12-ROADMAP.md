@@ -37,7 +37,7 @@ agent gives up on a real goal, with a reason.** No database, no API, no frontend
 - [x] A CLI: `pnpm agent --url <url> --goal "<goal>"`, printing the transcript and the outcome
 - [x] `fixtures/broken-shop` — the deliberately broken storefront (the `ALLY_SOURCE=1` plugin itself is Day 3)
 - [x] The purity suite (P-1 to P-5) passing
-- [ ] **The gate:** a live `pnpm agent` run against `broken-shop` with a real API key produces a sensible blocker
+- [x] **The gate:** a live run against `broken-shop` with a real model produces a sensible blocker — 2026-09-14, OpenRouter free models via the dashboard: `BLOCKED` at step 9, `UNLABELLED_CONTROL`, verdict "14 violations, zero of them the reason"
 
 **Stop-and-reassess trigger:** if by the end of day one the agent cannot produce a sensible blocker
 on `broken-shop`, escalate immediately. Prompt problem, serialiser problem, or premise problem —
@@ -50,14 +50,17 @@ find out which before building anything on top.
 **Definition of done: submit a URL and a goal in the browser and watch the narration stream in,
 spoken aloud, ending in a blocker card.** This is the demo's spine.
 
-- [ ] Prisma schema, migrations, Postgres and Redis in compose
-- [ ] Fastify API: `POST /runs`, `GET /runs/:id`, `GET /runs/:id/stream`
-- [ ] BullMQ worker wrapping the day-one loop, publishing step events to Redis
-- [ ] Next.js: landing form and `/live/[runId]` split screen
-- [ ] Web Speech API narration, two voices, with a toggle
-- [ ] axe-core baseline at both phases, findings stored with `backendNodeId`
-- [ ] `correlate()` and the verdict sentence
-- [ ] `/run/[runId]` report page, server rendered
+> **Demo build (DECISIONS.md #13):** the items ticked below are done in a single in-memory process. The
+> Prisma, Redis and BullMQ items are deliberately deferred, not forgotten.
+
+- [ ] Prisma schema, migrations, Postgres and Redis in compose — deferred (#13)
+- [x] Fastify API: `POST /runs`, `GET /runs/:id`, `GET /runs/:id/stream` (plus frame, fix, rerun, config)
+- [ ] BullMQ worker wrapping the day-one loop, publishing step events to Redis — in-process queue instead (#13)
+- [x] Next.js: landing form and `/live/[runId]` split screen (left panel: frames from the agent's browser)
+- [x] Web Speech API narration, two voices, with a toggle
+- [x] axe-core baseline at both phases (findings keyed by selector, not `backendNodeId`)
+- [x] `correlate()` and the verdict sentence
+- [x] `/run/[runId]` report page, server rendered
 
 **If you are behind at the end of day 2, cut the report page before you cut the live view.** The
 live view is the demo.
@@ -69,13 +72,13 @@ live view is the demo.
 **Definition of done: click Fix, a real pull request opens on a real repository, the verify run
 succeeds, and the pull request gets a comment.**
 
-- [ ] The Babel or SWC plugin stamping `data-ally-src`, wired into the fixture
-- [ ] `sourcemap/` — all three strategies, with the confidence gate
-- [ ] `patch/generate.ts` and the five validation gates
-- [ ] `github/` — Octokit App auth, branch, commit, pull request, the body template
-- [ ] The verify re-run, and the pull request comment
-- [ ] `fix.*` events on the stream, and the five-stage progress strip in the UI
-- [ ] `fixtures/fixed-shop` for the expected after-state
+- [ ] The Babel or SWC plugin stamping `data-ally-src`, wired into the fixture — cut; AST search instead
+- [x] `sourcemap/` — AST search only, with the confidence gate (the planned fallback)
+- [x] `patch/generate.ts` and the five validation gates
+- [ ] `github/` — branch, commit, pull request and body are built with a token; not yet run against a real repo, no App auth
+- [x] The verify re-run, and the pull request comment (comment untested without a repo)
+- [x] `fix.*` events on the stream, and the progress strip in the UI
+- [x] `fixtures/fixed-shop` — the patched copy the verify run targets, not a hand-fixed after-state
 
 **This is the day most likely to overrun.** The source mapper is the part that bites. If it is not
 working by mid-afternoon, fall back to the deterministic attribute only and drop the fiber and AST

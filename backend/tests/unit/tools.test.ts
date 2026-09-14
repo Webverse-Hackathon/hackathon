@@ -2,6 +2,7 @@ import { describe, expect, it } from 'vitest';
 import { buildDecisionRequest, formatTranscript } from '../../src/agent/prompts.js';
 import { parseToolCall, TOOL_DEFINITIONS } from '../../src/agent/tools.js';
 import { loadConfig } from '../../src/config/index.js';
+import { priceFor } from '../../src/llm/cost.js';
 
 describe('parseToolCall', () => {
   it('strips reasoning and confidence and validates the rest', () => {
@@ -61,5 +62,17 @@ describe('config', () => {
     expect(config.ALLY_MODEL_DECIDE).toBe('claude-sonnet-5');
     expect(config.ALLY_MODEL_NARRATE).toBe('claude-haiku-4-5-20251001');
     expect(config.ALLY_STEP_BUDGET).toBe(20);
+  });
+
+  it('uses the official API unless a gateway base URL is set, and rejects a malformed one', () => {
+    expect(loadConfig({}).ANTHROPIC_BASE_URL).toBeUndefined();
+    expect(loadConfig({ ANTHROPIC_BASE_URL: '' }).ANTHROPIC_BASE_URL).toBeUndefined();
+    expect(loadConfig({ ANTHROPIC_BASE_URL: ' https://gateway.example.com ' }).ANTHROPIC_BASE_URL).toBe('https://gateway.example.com');
+    expect(() => loadConfig({ ANTHROPIC_BASE_URL: 'gateway.example.com' })).toThrow(/ANTHROPIC_BASE_URL/);
+  });
+
+  it('prices the gateway models, so their runs never show an unknown cost', () => {
+    expect(priceFor('claude-opus-5')).toEqual({ input: 5, output: 25 });
+    expect(priceFor('claude-opus-4-8')).toEqual({ input: 5, output: 25 });
   });
 });

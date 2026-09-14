@@ -314,6 +314,13 @@ export const PullRequestInfoSchema = z.object({
 export type PullRequestInfo = z.infer<typeof PullRequestInfoSchema>;
 
 export const RunReportSchema = RunSummarySchema.extend({
+  source: z.enum(['MANUAL', 'CI', 'BARRIER_REPORT', 'VERIFY']),
+  /** Set on a VERIFY run: the blocked run whose fix it re-runs. */
+  parentRunId: z.string().nullable(),
+  /** Why the run errored, in words. Null otherwise. */
+  errorMessage: z.string().nullable(),
+  /** True when this run can be sent through the fix flow now. */
+  fixable: z.boolean(),
   /** Null until BOTH axe phases have completed. Never render a false zero. */
   blockerCaughtByAxe: z.boolean().nullable(),
   axeViolationCount: z.number().int().nullable(),
@@ -344,12 +351,27 @@ export type FixStarted = z.infer<typeof FixStartedSchema>;
 
 export const HealthResponseSchema = z.object({
   status: z.enum(['ok', 'degraded']),
-  db: z.enum(['ok', 'down']),
-  redis: z.enum(['ok', 'down']),
+  /** "absent" in the in-memory demo build, which has no database or Redis (DECISIONS.md #13). */
+  db: z.enum(['ok', 'down', 'absent']),
+  redis: z.enum(['ok', 'down', 'absent']),
   queueDepth: z.number().int(),
   browserPoolFree: z.number().int(),
 });
 export type HealthResponse = z.infer<typeof HealthResponseSchema>;
+
+/** Response to GET /api/config: what the dashboard needs to know about this server. */
+export const ServerConfigSchema = z.object({
+  /** False when no model key is configured: runs cannot start. */
+  modelConfigured: z.boolean(),
+  decideModel: z.string(),
+  narrateModel: z.string(),
+  /** Runs against this site are repo-connected and can be fixed. */
+  connectedSiteUrl: z.string(),
+  /** With a repository configured, a validated fix opens a real pull request. */
+  pullRequestsEnabled: z.boolean(),
+  pullRequestRepo: z.string().nullable(),
+});
+export type ServerConfig = z.infer<typeof ServerConfigSchema>;
 
 // ─── Server-sent events ──────────────────────────────────────────────────────
 // Documented in docs/05-API-CONTRACT.md. Keep the two in sync.
@@ -419,7 +441,12 @@ export const StreamEventSchema = z.discriminatedUnion('event', [
   }),
   z.object({
     event: z.literal('fix.stage'),
-    data: z.object({ stage: FixStageSchema, status: z.enum(['running', 'done', 'failed']) }),
+    data: z.object({
+      stage: FixStageSchema,
+      status: z.enum(['running', 'done', 'failed', 'skipped']),
+      /** Why a stage failed or was skipped, in words for the UI. */
+      detail: z.string().optional(),
+    }),
   }),
   z.object({ event: z.literal('fix.located'), data: SourceLocationSchema }),
   z.object({
@@ -510,6 +537,8 @@ export const ErrorCodeSchema = z.enum([
   'GITHUB_PERMISSION_DENIED',
   'RATE_LIMITED',
   'UPSTREAM_TIMEOUT',
+  'MODEL_NOT_CONFIGURED',
+  'FIX_IN_PROGRESS',
 ]);
 export type ErrorCode = z.infer<typeof ErrorCodeSchema>;
 

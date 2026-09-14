@@ -19,6 +19,22 @@ const EnvSchema = z.object({
     .string()
     .optional()
     .transform((value) => (value === undefined || value.trim() === '' || value.trim() === PLACEHOLDER_KEY ? undefined : value.trim())),
+  // An Anthropic-compatible gateway in place of api.anthropic.com. Empty means the official API.
+  ANTHROPIC_BASE_URL: z
+    .string()
+    .optional()
+    .transform((value) => (value === undefined || value.trim() === '' ? undefined : value.trim()))
+    .pipe(z.string().url().optional()),
+  /** Which adapter in llm/ to use (DECISIONS.md #15). */
+  ALLY_LLM_PROVIDER: z.enum(['anthropic', 'openai-compatible']).default('anthropic'),
+  ALLY_OPENAI_COMPAT_BASE_URL: z.string().url().default('https://openrouter.ai/api/v1'),
+  ALLY_OPENAI_COMPAT_API_KEY: z
+    .string()
+    .optional()
+    .transform((value) => (value === undefined || value.trim() === '' ? undefined : value.trim())),
+  ALLY_OPENAI_COMPAT_REASONING_EFFORT: z.enum(['none', 'low', 'medium', 'high']).default('low'),
+  /** 'decision' speaks the decision's reasoning instead of a second call per step. */
+  ALLY_NARRATION: z.enum(['model', 'decision']).default('model'),
   ALLY_MODEL_DECIDE: z.string().min(1).default('claude-sonnet-5'),
   ALLY_MODEL_NARRATE: z.string().min(1).default('claude-haiku-4-5-20251001'),
   ALLY_DECIDE_EFFORT: z.enum(['low', 'medium', 'high', 'xhigh', 'max']).default('low'),
@@ -28,7 +44,49 @@ const EnvSchema = z.object({
   ALLY_TRANSCRIPT_MAX_LINES: z.coerce.number().int().min(20).default(400),
   PLAYWRIGHT_HEADLESS: booleanFlag.default('true'),
   FIXTURE_URL: z.string().url().default('http://localhost:3100'),
+
+  // ─── The demo server (DECISIONS.md #13) ─────────────────────────────────────
+  API_PORT: z.coerce.number().int().min(1).max(65535).default(4000),
+  /** The dashboard's origin, the only one CORS allows. */
+  FRONTEND_ORIGIN: z.string().url().default('http://localhost:3000'),
+  ALLY_MAX_CONCURRENT_RUNS: z.coerce.number().int().min(1).max(8).default(2),
+  /** F-01: private and loopback addresses are refused unless the host is listed here. */
+  ALLY_PRIVATE_HOST_ALLOWLIST: z
+    .string()
+    .default('localhost,127.0.0.1')
+    .transform((value) => value.split(',').map((host) => host.trim().toLowerCase()).filter(Boolean)),
+
+  /** Mode A for the demo: runs against this origin can be fixed, because we hold its source. */
+  ALLY_CONNECTED_SITE_URL: z.string().url().default('http://localhost:3100'),
+  ALLY_CONNECTED_SOURCE_DIR: z.string().min(1).default('fixtures/broken-shop'),
+  /** Where a patch is applied and served for the verify re-run. */
+  ALLY_VERIFY_SOURCE_DIR: z.string().min(1).default('fixtures/fixed-shop'),
+  ALLY_VERIFY_SITE_URL: z.string().url().default('http://localhost:3101'),
+
+  /** Optional. With both set, the fix flow opens a real pull request. */
+  GITHUB_TOKEN: z
+    .string()
+    .optional()
+    .transform((value) => (value === undefined || value.trim() === '' ? undefined : value.trim())),
+  GITHUB_REPO: z
+    .string()
+    .optional()
+    .transform((value) => (value === undefined || value.trim() === '' ? undefined : value.trim()))
+    .pipe(z.string().regex(/^[\w.-]+\/[\w.-]+$/, 'GITHUB_REPO must look like owner/name').optional()),
+  /** Path of the connected site's source inside GITHUB_REPO, e.g. "fixtures/broken-shop". */
+  GITHUB_SOURCE_PATH: z.string().default('fixtures/broken-shop'),
+  GITHUB_BASE_BRANCH: z.string().min(1).default('main'),
 });
+
+/** The repository root: the directory holding pnpm-workspace.yaml. */
+export function repoRoot(): string {
+  let directory = path.dirname(fileURLToPath(import.meta.url));
+  for (let depth = 0; depth < 8; depth++) {
+    if (existsSync(path.join(directory, 'pnpm-workspace.yaml'))) return directory;
+    directory = path.dirname(directory);
+  }
+  throw new Error('Could not find the repository root (pnpm-workspace.yaml).');
+}
 
 export type Config = z.infer<typeof EnvSchema>;
 

@@ -15,9 +15,12 @@ const PRICES: { prefix: string; price: Price }[] = [
   { prefix: 'claude-sonnet-5', price: { input: 2, output: 10 } },
   { prefix: 'claude-haiku-4-5', price: { input: 1, output: 5 } },
   { prefix: 'claude-opus-5', price: { input: 5, output: 25 } },
+  { prefix: 'claude-opus-4-8', price: { input: 5, output: 25 } },
 ];
 
 export function priceFor(model: string): Price | null {
+  // OpenRouter's free variants cost nothing, so their cost is a known zero, not unknown.
+  if (model.endsWith(':free')) return { input: 0, output: 0 };
   return PRICES.find((entry) => model.startsWith(entry.prefix))?.price ?? null;
 }
 

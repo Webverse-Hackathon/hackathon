@@ -12,13 +12,13 @@ When you fix one, change its status, add the commit, and add a fixture to `10-TE
 
 | ID | Category | Failure | Severity | Status |
 |---|---|---|---|---|
-| F-01 | Target | URL points at a private or metadata address (SSRF) | Critical | KNOWN |
+| F-01 | Target | URL points at a private or metadata address (SSRF) | Critical | KNOWN · partly handled |
 | F-02 | Target | Site requires login before the goal is reachable | High | KNOWN |
 | F-03 | Target | Site blocks headless browsers or serves a bot challenge | High | KNOWN |
 | F-04 | Target | Page is a canvas or WebGL app with no accessibility tree | Medium | MITIGATED |
 | F-05 | Target | AX tree never stabilises; snapshots differ every poll | High | MITIGATED |
 | F-06 | Target | Closed shadow DOM or a cross-origin iframe hides content | Medium | KNOWN |
-| F-07 | Target | `X-Frame-Options` stops the left panel from embedding the site | Medium | KNOWN |
+| F-07 | Target | `X-Frame-Options` stops the left panel from embedding the site | Medium | MITIGATED |
 | F-08 | Target | A cookie banner blocks everything and is itself inaccessible | Medium | KNOWN |
 | F-09 | Target | The goal is genuinely multi-page and crosses an origin | Medium | KNOWN |
 | F-10 | Agent | Agent gives up too early on a page that is actually fine | High | KNOWN |
@@ -67,6 +67,17 @@ When you fix one, change its status, add the commit, and add a fixture to `10-TE
 | F-67 | Build | The CI purity step called a script that does not exist | Critical | HIT · MITIGATED |
 | F-68 | Demo | The scripted demo transcript is not what Chromium actually exposes | High | KNOWN |
 | F-69 | Agent | A re-perceived first step is judged as an empty page | High | HIT · MITIGATED |
+| F-70 | Build | The fixture's standalone build needs symlink rights on Windows | Medium | HIT · KNOWN |
+| F-71 | Build | The integration suite cannot spawn the fixture on Windows | Low | HIT · KNOWN |
+| F-72 | Agent | Narration sends a sampling parameter the model rejects | High | MITIGATED |
+| F-73 | Fix | An inherited pointer cursor makes the icon, not the control, the fix target | High | HIT · MITIGATED |
+| F-74 | Fix | The agent names what it can hear, not the control or overlay it cannot | High | MITIGATED |
+| F-75 | Dogfood | A nested scroll box in our own live view fails axe scrollable-region-focusable | Medium | HIT · MITIGATED |
+| F-76 | Demo | The verify site is left patched after a fix | Medium | MITIGATED |
+| F-77 | Infra | The model gateway only serves approved clients and refuses Ally | Critical | HIT · KNOWN |
+| F-78 | Infra | The free model tier's daily request cap runs out before the demo | Critical | KNOWN |
+| F-79 | Infra | Free model endpoints are overloaded, or write tool calls as text | Critical | HIT · MITIGATED |
+| F-80 | Infra | NVIDIA NIM trial: shared 40 RPM, prototype-only terms, errors and tool_choice differ | High | MITIGATED |
 
 ---
 
@@ -82,6 +93,7 @@ link-local, carrier-grade NAT or unique-local range. Validating only the hostnam
 because DNS can rebind between check and fetch. Also block non-standard ports below 1024 other than
 80 and 443.
 **Test.** `tests/unit/url-guard.test.ts`, including the redirect and rebinding cases.
+**Status.** Still KNOWN, partly handled (demo build session, 2026-09-14): `backend/src/lib/url-guard.ts` checks the scheme, refuses credentials, resolves DNS and refuses private, loopback, link-local, CGNAT and metadata ranges at the API, with `ALLY_PRIVATE_HOST_ALLOWLIST` (default localhost) for the local fixture. Not yet done: re-checking on every redirect and at navigation time (DNS rebinding), and the port rule. Tests: `tests/unit/patch.test.ts` "url guard".
 
 ### F-02 · Login wall — High
 
@@ -137,6 +149,11 @@ the reader both know the difference between "the page hides this" and "we could 
 screenshot taken by a separate, clearly-labelled process** — not by the agent's driver. That process
 lives in `backend/src/preview/` and must never be importable from `agent/`. Enforced by an eslint
 `no-restricted-imports` rule, because the whole premise depends on that separation.
+**Status.** MITIGATED differently (demo build session, 2026-09-14, DECISIONS.md #13): there is no iframe.
+The left panel shows JPEG frames captured by `preview/frames.ts` **from the agent's own page**, so it
+follows every keystroke (an iframe is a separate browser that never moves). This departs from "not by the
+agent's driver". What still holds: frames are served on their own endpoint to the dashboard, `agent/`
+cannot import `preview/` (eslint and P-4), and no frame is ever placed in a prompt (P-2).
 
 ### F-08 · Cookie banner — Medium
 
@@ -523,6 +540,128 @@ page that works.
 a full read.
 **Test.** `tests/unit/loop.test.ts` "F-17".
 **Status.** HIT, MITIGATED (Phase 1 session, 2026-09-14, uncommitted).
+
+### F-70 · The fixture will not build on Windows without symlink rights — Medium
+
+**Trigger.** `pnpm --filter @ally/fixture-broken-shop build` on Windows without Developer Mode or an
+elevated shell. `next.config.mjs` sets `output: 'standalone'`, which the fixture Dockerfile needs.
+**Symptom.** `next build` fails with `EPERM: operation not permitted, symlink ...` while copying traced
+files into `.next/standalone`.
+**Mitigation.** Not fixed. Workarounds: turn on Windows Developer Mode (lets users create symlinks), or
+serve the fixture with `next dev -p 3100` and set `FIXTURE_URL`. Integration tests pass against dev mode.
+Do not remove `standalone`: the Docker image depends on it.
+**Test.** None; found during the Phase 1 merge check on Windows.
+**Status.** HIT · KNOWN (Phase 1 merge check, 2026-09-14).
+
+### F-71 · The integration suite cannot start the fixture on Windows — Low
+
+**Trigger.** `backend/tests/integration/broken-shop.test.ts` with nothing already serving `FIXTURE_URL`,
+on Windows. It calls `spawn('pnpm', ...)` without `shell: true`, and Windows only has `pnpm.cmd`.
+**Symptom.** The suite fails in `beforeAll` before a browser opens. Separately, a machine that never
+ran `playwright install chromium` fails every test with "Executable doesn't exist".
+**Mitigation.** Not fixed. Start the fixture yourself and set `FIXTURE_URL=http://localhost:3100`, and run
+`pnpm --filter @ally/backend exec playwright install chromium` once per machine.
+**Test.** None; found during the Phase 1 merge check on Windows.
+**Status.** HIT · KNOWN (Phase 1 merge check, 2026-09-14).
+
+### F-72 · Narration sends a sampling parameter the model rejects — High
+
+**Trigger.** `ALLY_MODEL_NARRATE` set to Opus 4.7 or later (or Sonnet 5, Opus 5), for example because a
+gateway serves only Opus (`DECISIONS.md` #12). `llm/anthropic.ts` sent `temperature: 0.3` on `narrate`.
+**Symptom.** Every narration call returns 400. F-20's fallback reads the raw transcript line instead, so
+nothing crashes: the run just silently never narrates, and the premise loses its voice on stage.
+**Mitigation.** `narrate` sends no sampling parameters on any model. Haiku 4.5 accepts that too.
+**Test.** None without the API; the gateway probe sends the exact narrate shape.
+**Status.** MITIGATED before it was hit (gateway session, 2026-09-14).
+
+### F-73 · An inherited pointer cursor picks the icon, not the control — High
+
+**Trigger.** Choosing the element to patch by walking up from the blocking node to the first element
+that "looks interactive", where a pointer cursor counts as a tell for a `<div onClick>`.
+**Symptom.** `cursor` is inherited, so the `<svg>` inside `div.add` has `cursor: pointer` too. The svg
+became the fix target, it has no class, and the source mapper could not find it: the fix stopped at locate.
+**Mitigation.** `baseline/axe.ts` counts a pointer cursor only on the element that declares it (its parent
+does not also have one).
+**Test.** `backend/tests/integration/api.test.ts` "runs to a blocker" asserts the fix target is `div.add`.
+**Status.** HIT, MITIGATED (demo build session, 2026-09-14).
+
+### F-74 · The agent names what it can hear, not what it cannot reach — High
+
+**Trigger.** An `UNLABELLED_CONTROL` or `FOCUS_NOT_TRAPPED` blocker. The broken control or the overlay is
+not in the accessibility tree, so the agent can only point at a neighbour (the product image) or nothing.
+**Symptom.** The fix patches the neighbour, for example adds alt text to the image, and the verify run
+fails the same way.
+**Mitigation.** `baseline/axe.ts` `inspectBlocker`: if no ancestor behaves like a control, search the
+enclosing card for a nameless one. For `FOCUS_NOT_TRAPPED`, target the visible full-screen fixed overlay
+that is not a modal dialog, starting from the body when the agent named no node. The patch prompt tells the
+model to move focus with an inline ref callback, since only the element's own lines are replaced.
+**Test.** The svg case is covered by `api.test.ts`. The overlay case is **untested with a real model**:
+rehearse it before the demo.
+**Status.** MITIGATED (demo build session, 2026-09-14).
+
+### F-75 · Our own live view failed axe — Medium
+
+**Trigger.** Each step's transcript in `/live/[runId]` had its own `max-height` scroll box with no
+focusable content.
+**Symptom.** axe `scrollable-region-focusable` on our dashboard: keyboard users could not scroll a long
+first read. Adding `tabIndex` is refused by jsx-a11y strict.
+**Mitigation.** No nested scroll: long transcripts show 12 lines and a "Show all" button. The outer panel
+scrolls, and contains focusable controls.
+**Test.** axe scan of `/`, `/live/[id]` and `/run/[id]` reports zero violations (D-01, run by hand with
+Playwright in this session; not yet in CI).
+**Status.** HIT, MITIGATED (demo build session, 2026-09-14).
+
+### F-76 · The verify site is left patched — Medium
+
+**Trigger.** A fix writes into `fixtures/fixed-shop`, and nothing resets it after the demo or a crash.
+**Symptom.** The next verify run starts from an old patch, or a rehearsal looks fixed before Fix is pressed.
+**Mitigation.** `fix/workspace.ts` `syncVerifySite` re-copies `broken-shop` before every validation
+attempt and before every verify run, then applies only this run's lineage of patches. After a demo,
+`git checkout fixtures/fixed-shop` restores the committed copy.
+**Test.** `api.test.ts` resets it in `afterAll`.
+**Status.** MITIGATED (demo build session, 2026-09-14).
+
+### F-77 · The gateway refuses Ally as a client — Critical
+
+**Trigger.** Pointing `ANTHROPIC_BASE_URL` at Agent Router (agentrouter.org), which serves only the coding tools it recognises.
+**Symptom.** Every model call returns 401 `unauthorized_client_error` ("unauthorized client detected") with either `x-api-key` or `Authorization: Bearer`. The run errors before step 1. The dashboard said "The Anthropic API key was rejected", which sent us looking at the key.
+**Mitigation.** Use a provider that permits API use by our own server. Do **not** impersonate an approved client: it evades the provider's access control and risks the key being banned mid-demo. The adapter now passes the provider's own refusal message through.
+**Test.** None without a provider; the scratch auth probe reproduced it on 2026-09-14.
+**Status.** HIT, KNOWN (demo build session, 2026-09-14). Blocks every real run. Superseded for the demo by DECISIONS.md #15.
+
+### F-78 · The free tier runs out of requests — Critical
+
+**Trigger.** OpenRouter `:free` models: 20 requests per minute, 50 per day for an account that has never bought
+$10 of credits. A blocked run is about 8 to 12 requests, a fix 1 to 3, a verify run 10 to 20.
+**Symptom.** A 429 mentioning the daily limit mid-demo; the run ends `ERRORED` with `LLM_RATE_LIMITED`.
+**Mitigation.** `ALLY_NARRATION=decision` (one request per step). The adapter never retries a daily cap, only a
+per-minute one. Rehearse sparingly, and do not rehearse on the morning of the demo. Buying $10 of credits once raises
+the cap to 1000 a day while the models stay free. Keep a recorded run as the fallback (F-50).
+**Test.** `tests/unit/openai-compatible.test.ts` "a daily cap is not retried".
+**Status.** KNOWN (demo build session, 2026-09-14).
+
+### F-79 · Free endpoints overload, and some models write the tool call as text — Critical
+
+**Trigger.** OpenRouter `:free` models at busy times, and open models that ignore `tool_choice`.
+**Symptom.** Live probe, 2026-09-14: `nemotron-3-ultra` and `nemotron-3-super` returned "Upstream error from Nvidia: Service temporarily overloaded", `gemma-4-31b` returned a provider 429, and `nemotron-3-super`, when it did answer, wrote `[[{"name": "press_key", "parameters": {...}}]]` as text with no tool call, which the loop counts as an unusable decision.
+**Mitigation.** `ALLY_MODEL_DECIDE` takes a comma-separated fallback list from different upstream providers, sent as OpenRouter `models` and rotated on each retry (4 retries, backoff up to 8 s). `toolCallsFromText` recovers a call written as JSON text for a known tool only; it is still validated strictly by `agent/tools.ts`. The same list then answered in 4.5 s with a valid `press_key`.
+**Test.** `tests/unit/openai-compatible.test.ts` "recovers a tool call written as text" and "falls through a comma-separated model list".
+**Status.** HIT, MITIGATED (demo build session, 2026-09-14). A demo can still hit an overload on all three; keep a recorded run as the fallback (F-50).
+
+### F-80 · NVIDIA NIM's trial endpoint differs from OpenRouter — High
+
+**Trigger.** `ALLY_OPENAI_COMPAT_BASE_URL=https://integrate.api.nvidia.com/v1` with `moonshotai/kimi-k3` (DECISIONS.md #16).
+**Symptom.** Expected, not yet seen: (1) errors come back as RFC 7807 `{ title, detail }` with no `error` object, so the
+dashboard showed only "Bad Request"; (2) some OpenAI-compatible servers reject `tool_choice: "required"` with a 400,
+which would end every decision; (3) a 429 after about 40 requests a minute, shared by every run and model on the key;
+(4) a 403 or "function not found" when the account has not opened the model's page and clicked through its terms;
+(5) Kimi K3 accepts reasoning effort low, high or max, so `medium` may be rejected.
+**Mitigation.** The adapter reads `detail`. On a 400 naming `tool_choice` it asks again with `auto` and keeps `auto` for
+the provider's lifetime; `toolCallsFromText` still recovers calls written as text. 429 per minute is retried with backoff.
+Keep `ALLY_OPENAI_COMPAT_REASONING_EFFORT=low` (or `none` if the model rejects the parameter), `ALLY_NARRATION=decision`,
+and at most 2 runs at once. Prototype-only terms: replace before production.
+**Test.** `tests/unit/openai-compatible.test.ts` "falls back to tool_choice auto once when a server rejects required".
+**Status.** MITIGATED (demo build session, 2026-09-14). Items 3 to 5 need the live probe with an `nvapi-` key.
 
 ---
 

@@ -45,6 +45,16 @@ export function fallbackNarration(transcript: TranscriptLine[]): string {
   return `${spoken.join(' ')}${more}`.trim();
 }
 
+/**
+ * Narration without a second model call: the decision's own reasoning, spoken
+ * (ALLY_NARRATION=decision). The same vocabulary guard applies; a violating or
+ * empty reason is replaced by the raw transcript.
+ */
+export function narrationFromReasoning(reasoning: string, transcript: TranscriptLine[]): string {
+  const text = reasoning.replace(/^["“]|["”]$/g, '').trim();
+  return text !== '' && narrationViolations(text, transcript).length === 0 ? text : fallbackNarration(transcript);
+}
+
 export interface NarrationResult {
   text: string;
   source: 'model' | 'fallback';

@@ -301,6 +301,18 @@ Status page data: the original words, the extraction, the run outcome
 
 ---
 
+## Demo build additions (DECISIONS.md #13)
+
+- `GET /api/runs/:id/frame?after=<seq>` — the latest JPEG of the agent's browser, for the dashboard's left
+  panel only; `204` when nothing newer than `seq` exists. Header `X-Frame-Seq`. Never reaches the agent.
+- `GET /api/config` — `ServerConfig`: whether a model key is configured, the model names, the connected
+  site, and whether pull requests are enabled.
+- `fix.stage` may carry `"status": "skipped"` and a `detail` sentence (the PR stage without GitHub, or why
+  a stage failed). `fix.failed` may use `"stage": "verify"`.
+- The report adds `source`, `parentRunId`, `errorMessage` and `fixable`.
+- New error codes: `MODEL_NOT_CONFIGURED` (503) and `FIX_IN_PROGRESS` (409).
+- `GET /api/health` reports `db` and `redis` as `"absent"`: this build has neither.
+
 ## `GET /api/runs`
 
 Paginated history. Query: `?status=&repo=&limit=20&cursor=` (`repo` is `owner/name`, `limit` is
