@@ -10,7 +10,7 @@
 
 import { readFileSync } from 'node:fs';
 import path from 'node:path';
-import { LOCATE_CONFIDENCE_THRESHOLD, type FixStage, type StreamEvent } from '@ally/shared';
+import { LOCATE_CONFIDENCE_THRESHOLD, STEP_BUDGET_DEFAULT, type FixStage, type StreamEvent } from '@ally/shared';
 import { repoRoot, type Config } from '../config/index.js';
 import { commentOnPullRequest, openPullRequest } from '../github/pull-request.js';
 import { costUsd } from '../llm/cost.js';
@@ -31,7 +31,7 @@ export interface FixDeps {
   createLlm: () => LlmProvider;
 }
 
-function resolveDir(dir: string): string {
+export function resolveDir(dir: string): string {
   return path.isAbsolute(dir) ? dir : path.join(repoRoot(), dir);
 }
 
@@ -199,7 +199,8 @@ export async function executeFix(record: RunRecord, deps: FixDeps): Promise<void
       goal: record.goal,
       mode: 'REPO_CONNECTED',
       source: 'VERIFY',
-      stepBudget: record.stepBudget,
+      // The verify run walks past the old wall to the goal, so it gets at least the default budget (F-83).
+      stepBudget: Math.max(record.stepBudget, STEP_BUDGET_DEFAULT),
       parentRunId: record.id,
       overrides,
     });

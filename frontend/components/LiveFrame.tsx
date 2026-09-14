@@ -56,17 +56,17 @@ export function LiveFrame({ runId, active, host }: { runId: string; active: bool
   return (
     <figure className="frame">
       <figcaption className="frame-caption">
-        <span className="eyebrow">What you see</span>
-        <span className="frame-host">{host ?? 'Opening the browser…'}</span>
+        <span className="eyebrow">WHAT YOU SEE (HUMAN ONLY)</span>
+        <span className="frame-host">{host ?? 'OPENING THE BROWSER…'}</span>
       </figcaption>
       <div className="frame-screen">
         {src ? (
           <img src={src} alt="Live view of the page the agent is operating. The agent itself never receives this image." />
         ) : (
-          <div className="frame-empty">Waiting for the first frame…</div>
+          <div className="frame-empty">WAITING FOR THE FIRST FRAME…</div>
         )}
         <p className="frame-badge">
-          <span aria-hidden="true">⊘</span> The agent cannot see this
+          <span aria-hidden="true">⊘</span> THE AGENT CANNOT SEE THIS
         </p>
       </div>
     </figure>

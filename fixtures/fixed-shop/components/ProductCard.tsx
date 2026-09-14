@@ -40,9 +40,9 @@ export function ProductCard({ product }: ProductCardProps) {
     <li>
       <div className="card">
         <img src={product.image} />
-        <div className="add" onClick={() => addToCart(product.id)}>
-          <PlusIcon />
-        </div>
+         <button className="add" onClick={() => addToCart(product.id)} aria-label={`Add ${product.name} to cart`}>
+           <PlusIcon />
+         </button>
         <p className="product-name">{product.name}</p>
         <p className="product-price">{formatPrice(product.price)}</p>
       </div>

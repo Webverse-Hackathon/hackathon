@@ -35,6 +35,38 @@ export function syncVerifySite(sourceDir: string, verifyDir: string, overrides: 
   for (const [filePath, content] of Object.entries(overrides)) writeIfChanged(path.join(verifyDir, filePath), content);
 }
 
+/** Only files a patch can target (see sourcemap/ast-search.ts) are ever overrides. */
+const PATCHABLE = /\.(tsx|jsx)$/;
+
+function patchedFiles(sourceDir: string, verifyDir: string, relative: string, found: Record<string, string>): void {
+  for (const entry of readdirSync(path.join(verifyDir, relative))) {
+    const filePath = path.posix.join(relative, entry);
+    const full = path.join(verifyDir, filePath);
+    if (statSync(full).isDirectory()) {
+      patchedFiles(sourceDir, verifyDir, filePath, found);
+      continue;
+    }
+    if (!PATCHABLE.test(entry)) continue;
+    const content = readFileSync(full);
+    const original = path.join(sourceDir, filePath);
+    if (!existsSync(original) || !readFileSync(original).equals(content)) found[filePath] = content.toString('utf8');
+  }
+}
+
+/**
+ * The patches the verify site is serving right now: every source file that differs
+ * from the connected source. A run started by hand on the verify site inherits these
+ * as its overrides, so fixing that run builds on them instead of wiping them (F-81).
+ */
+export function patchesOnVerifySite(sourceDir: string, verifyDir: string): Record<string, string> {
+  const found: Record<string, string> = {};
+  if (!existsSync(verifyDir)) return found;
+  for (const root of COPY_ROOTS) {
+    if (existsSync(path.join(verifyDir, root))) patchedFiles(sourceDir, verifyDir, root, found);
+  }
+  return found;
+}
+
 /** Waits until the site answers, then gives the dev server a moment to pick up changed files. */
 export async function waitForSite(url: string, timeoutMs = 60_000): Promise<boolean> {
   const deadline = Date.now() + timeoutMs;

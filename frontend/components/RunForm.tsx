@@ -51,7 +51,10 @@ export function RunForm() {
 
   return (
     <form className="card run-form" onSubmit={submit} noValidate aria-describedby={error ? ids.error : undefined}>
-      <h2 className="run-form-title">Test a task</h2>
+      <h2 className="run-form-title">
+        <span>TEST A TASK</span>
+        <span className="badge badge-progress" style={{ fontSize: '0.75rem' }}>SIMULATION</span>
+      </h2>
 
       <div className="field">
         <label htmlFor={ids.url}>Website address</label>
@@ -122,7 +125,7 @@ export function RunForm() {
       ) : null}
 
       <button type="submit" className="button button-large" disabled={submitting || modelMissing || serverError !== null}>
-        {submitting ? 'Starting…' : 'Run the agent'}
+        {submitting ? 'STARTING SIMULATION…' : 'RUN THE AGENT →'}
       </button>
       {config ? (
         <p className="small muted form-footnote">
