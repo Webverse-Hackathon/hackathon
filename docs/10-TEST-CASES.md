@@ -114,6 +114,21 @@ Pure, synchronous, fed from recorded trees. The highest-value tests in the repo.
 | X-02 | `declare_success` with no supporting evidence | downgraded to `BLOCKED` / `UNKNOWN`, the claim recorded verbatim |
 | X-03 | `declare_success` immediately after a line flagged as prompt injection | refused |
 | X-04 | Goal reached but announced only by a URL change | accepted, with the evidence recorded as the URL change |
+| X-05 | Add-to-cart goal; agent hears "Cart (0)", presses Enter, later hears "Cart (1)" with nothing announced | accepted; evidence names the rise and notes WCAG 4.1.3 (DECISIONS.md #18) |
+| X-06 | Same, but the count is unchanged | downgraded |
+| X-07 | The cart already said 1 and no lower count was heard | downgraded |
+| X-08 | The count rose, but no Enter or Space came after the lower reading | downgraded |
+| X-09 | X-05's evidence with a goal that is not about the cart | downgraded |
+
+### Walked Tab order — `agent/tab-order.ts` (F-83)
+
+| ID | Scenario | Expected |
+|---|---|---|
+| T-01 | Tab from the page start through three stops | the stops in that order, focus on the last |
+| T-02 | Tab to the Add button, Enter, Tab to the next product | the cart is listed two stops before focus |
+| T-03 | Shift+Tab to a stop not yet seen; revisit it after its name changed | inserted before the current stop; the name refreshed |
+| T-04 | Enter moves focus into something never reached by Tab | not placed in the order; focus reported as off it |
+| T-05 | A stop's name tries to close the untrusted fence | sanitised, numbered, focus position stated |
 
 ### Patch validation — `patch/validate.ts`
 
@@ -264,6 +279,10 @@ whose pull request was closed externally. A barrier report whose run errored.
 | 2026-09-14 | F-75 | Our live view's nested transcript scroll box failed axe `scrollable-region-focusable` | Playwright axe scan of `/live/[id]` (D-01), by hand | uncommitted |
 | 2026-09-14 | — | The live view never showed a frame for a run that ended quickly: a cancelled frame poll advanced the sequence and discarded the image | Playwright load of an errored run's `/live/[id]`, three reloads, frame shown each time (by hand) | uncommitted |
 | 2026-09-14 | F-80 | NIM's problem-details errors lost their message, and a server refusing `tool_choice: required` would have failed every decision | `backend/tests/unit/openai-compatible.test.ts` "falls back to tool_choice auto once when a server rejects required" | uncommitted |
+| 2026-09-15 | F-81 | Fix on a run started by hand on the verify site re-copied broken-shop, undoing the earlier `ProductCard` patch | `backend/tests/unit/workspace.test.ts`; `backend/tests/integration/api.test.ts` "F-81" | uncommitted |
+| 2026-09-15 | F-82 | A `CONTENT_NOT_REACHABLE` blocker with no named node was mapped to the focused footer link, and locate stopped at 25% | `backend/tests/integration/api.test.ts` "F-82" asserts the fix target is `div.add` | uncommitted |
+| 2026-09-15 | F-13 | A real add-to-cart success ("Cart (0)" → Enter → "Cart (1)") was downgraded to `BLOCKED / UNKNOWN`, and Fix chased a live-region patch | `backend/tests/unit/confirm.test.ts` X-05 to X-09; `backend/tests/unit/loop.test.ts` "DECISIONS.md #18" | uncommitted |
+| 2026-09-15 | F-83 | The verify run lost the Tab order after an unannounced Enter, pressed Space on the same button and was abandoned at its 12-step budget | `backend/tests/unit/tab-order.test.ts` T-01 to T-05; `backend/tests/unit/loop.test.ts` "F-83"; verify budget at least 20 | uncommitted |
 
 ---
 

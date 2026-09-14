@@ -19,6 +19,7 @@ import { confirmSuccess } from './confirm.js';
 import { LoopDetector } from './loop-detect.js';
 import { narrateStep, narrationFromReasoning } from './narrate.js';
 import { buildDecisionRequest, type HistoryTurn } from './prompts.js';
+import { TabOrderMemory, type FocusStop } from './tab-order.js';
 import { parseToolCall, type ParsedDecision } from './tools.js';
 
 /** F-04: fewer meaningful lines than this on the first snapshot is itself the finding. */
@@ -83,6 +84,14 @@ function focusIdentity(focus: FocusInfo | null): string | null {
   return focus.backendNodeId !== null ? `b${focus.backendNodeId}` : `n${focus.axNodeId}`;
 }
 
+function focusStop(focus: FocusInfo | null): FocusStop | null {
+  const id = focusIdentity(focus);
+  if (!focus || id === null || focus.role === 'RootWebArea') return null;
+  return { id, spoken: focusPhrase(focus), axNodeId: focus.axNodeId };
+}
+
+const ACTIVATION_KEYS: ReadonlySet<string> = new Set(['Enter', 'Space']);
+
 function nodeIdentity(node: AXNode | undefined): string | null {
   if (!node) return null;
   return node.backendDOMNodeId !== undefined ? `b${node.backendDOMNodeId}` : `n${node.nodeId}`;
@@ -123,6 +132,9 @@ export async function runGoal(options: RunGoalOptions): Promise<RunResult> {
   const history: HistoryTurn[] = [];
   const usageByModel: Record<string, ModelUsage> = {};
   const loopDetector = new LoopDetector();
+  // F-83: the Tab order walked on this page, and the step each control was last activated at.
+  const tabOrder = new TabOrderMemory();
+  const activatedAt = new Map<string, number>();
   const startUrl = driver.currentUrl();
 
   let stepsUsed = 0;
@@ -242,7 +254,7 @@ export async function runGoal(options: RunGoalOptions): Promise<RunResult> {
       let correction: string | undefined;
       for (let attempt = 0; attempt < 2 && !parsed.ok; attempt++) {
         const response = await llm.decide(
-          buildDecisionRequest({ goal, step, budget: stepBudget, history, transcript, correction }),
+          buildDecisionRequest({ goal, step, budget: stepBudget, history, transcript, tabOrder: tabOrder.view(), correction }),
         );
         recordUsage(response.model, response.usage);
         parsed = parseToolCall(response.toolCalls[0]);
@@ -290,6 +302,8 @@ export async function runGoal(options: RunGoalOptions): Promise<RunResult> {
           recentLines: [...previousTranscript, ...transcript],
           startUrl,
           currentUrl: driver.currentUrl(),
+          goal,
+          steps,
         });
         if (confirmation.confirmed) return finish({ status: 'SUCCEEDED', evidence: confirmation.evidence });
         return blocked(step, 'UNKNOWN', confirmation.reason, decision.reasoning, snapshot);
@@ -339,11 +353,25 @@ export async function runGoal(options: RunGoalOptions): Promise<RunResult> {
         const urlAfter = driver.currentUrl();
         if (pathOf(urlAfter) !== pathOf(urlBefore)) {
           result = `the page changed to ${pathOf(urlAfter)}`;
-        } else if (focusIdentity(focusAfter) !== focusIdentity(focusBefore)) {
-          result = `focus moved to ${focusPhrase(focusAfter)}`;
+          tabOrder.reset();
+          activatedAt.clear();
         } else {
-          result = 'focus did not move';
-          emit({ event: 'step.warning', data: { index: step, text: 'Focus did not move.' } });
+          if (focusIdentity(focusAfter) !== focusIdentity(focusBefore)) {
+            result = `focus moved to ${focusPhrase(focusAfter)}`;
+          } else {
+            result = 'focus did not move';
+            emit({ event: 'step.warning', data: { index: step, text: 'Focus did not move.' } });
+          }
+          tabOrder.observe(tool.input.key, focusStop(focusBefore), focusStop(focusAfter));
+          const activated = focusIdentity(focusBefore);
+          if (ACTIVATION_KEYS.has(tool.input.key) && activated !== null && focusBefore?.role !== 'RootWebArea') {
+            const earlier = activatedAt.get(activated);
+            // F-83: pressing Enter again on "Add to cart" adds a second item. Say so.
+            if (earlier !== undefined) {
+              result += `. You already activated this control at step ${earlier}; activating it again can repeat the action`;
+            }
+            activatedAt.set(activated, step);
+          }
         }
       }
       reperceived = 0;

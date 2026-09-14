@@ -336,10 +336,60 @@ so it is fine for the demo and must be replaced before real users. Prompts, incl
 
 ---
 
+## 17 · Bynara (NaraRouter) free plan, StepFun 3.7 Flash with Tencent Hy3 as fallback
+**2026-09-15 · accepted** · supersedes the host and model choice in #16; the adapter and one-call-per-step stay
+
+**Context.** Kimi K3 on NVIDIA NIM's trial was slow enough that steps timed out. With 4 retries and a 60 s
+per-call timeout, one stuck step could hang for about five minutes. Groq's free tier was reconsidered and rejected
+again: 8K tokens per minute is about one decision request (#15). The team chose Bynara's OpenAI-compatible gateway,
+`https://router.bynara.id/v1`.
+Its public plans endpoint (`/api/plans`) lists the free plan as 15 requests per minute and 7M tokens a day, with
+`agnes-2.5-flash`, `laguna-s-2.1`, `stepfun-3.7-flash` and `tencent-hy3-free`.
+
+**Decision.** Decide with `stepfun-3.7-flash,tencent-hy3-free`: the adapter rotates the list on each retry, including on
+hosts other than OpenRouter. Narrate with `stepfun-3.7-flash`. Reasoning effort `low` (the gateway accepts `reasoning_effort`),
+step timeout 30 s (a flash model should answer well inside it, and a stuck call fails over sooner), one run at a time
+(15 requests a minute), `ALLY_NARRATION=decision`.
+
+**Rejected.** `laguna-s-2.1` and `agnes-2.5-flash` as the first choice: less known for general tool-calling agents.
+Groq free tier (token-per-minute cap). Staying on NIM (latency).
+
+**Consequence.** Tool calling on these models is unverified until a probe runs with an `sk-nry-` key. If
+`tool_choice: required` is refused, the F-80 downgrade to `auto` and text recovery apply. Free model ids have no
+`:free` suffix, so `llm/cost.ts` reports their cost as unknown. Prompts, including page text, go to a third-party
+gateway. 15 requests a minute can throttle a fast run; 429s are retried with backoff.
+
+---
+
+## 18 · A cart count heard rising confirms an add-to-cart goal
+**2026-09-15 · accepted** · widens the evidence `confirmSuccess` accepts (F-13); nothing else about F-13 changes
+
+**Context.** Live run `0afd9f00` on the patched shop: the agent heard "Cart (0)", pressed Enter on "Add Blue linen shirt to
+cart", moved back and heard "Cart (1)". A blind user would know the shirt was added. The confirmation accepted only a
+past-tense heading, status or alert, or a confirming URL, and it never looked at the goal. So the run was downgraded to
+`BLOCKED / UNKNOWN`, and Fix chased a live-region patch nobody needed. It also meant a verify run of an add-to-cart
+goal could never reach "Goal completed" on a site that does not announce the change.
+
+**Decision.** `agent/confirm.ts` also accepts a rising cart count, under all of these conditions. The goal asks to add,
+put or place something in a cart, bag, basket or trolley. The count is read from a button, link, status, alert or
+announcement the agent perceived at this step or the one before, never from the model's evidence text. An Enter or
+Space was pressed after the last reading, and the count is higher than that reading. The injection refusal still
+comes first. If nothing announced the change, the run still succeeds, and the evidence records that the user had to
+go and find the count (WCAG 4.1.3 Status Messages), like `MEANINGLESS_NAME`: degraded, not blocked.
+
+**Rejected.** Trusting any "Cart (n)" line: a cart that starts at 1 would confirm with no action. Leaving the rule strict:
+it reports sites a blind user can complete as blocked, which is the opposite of the premise. A general "any control's
+name changed" rule: too loose to be safe from hallucinated success before the demo.
+
+**Consequence.** Ally cannot tell which item was added, only that the count rose after an activation. The 4.1.3 note
+lives in the evidence string, shown on the live view. The report has no separate field for it yet.
+
+---
+
 ## Template for the next entry
 
 ```md
-## 17 · Title
+## 19 · Title
 **YYYY-MM-DD · accepted**
 
 **Context.**

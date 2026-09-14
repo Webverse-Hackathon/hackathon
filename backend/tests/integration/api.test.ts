@@ -59,6 +59,26 @@ class DemoScript implements LlmProvider {
     }
 
     this.decisions++;
+    // F-82: tab to the footer, then blame nothing. Focus is on a link the keyboard reached.
+    if (/reach the footer/.test(text)) {
+      // What the screen reader just said, not the walked Tab order that follows it (F-83).
+      const heard = text.slice(text.lastIndexOf('The screen reader just said:'));
+      const latest = heard.slice(0, heard.indexOf('</page_transcript>'));
+      if (this.decisions === 1 || !/link, Shipping\./.test(latest)) {
+        return respond([{ name: 'press_key', input: { key: 'Tab', reasoning: 'explore', confidence: 0.8 } }]);
+      }
+      return respond([
+        {
+          name: 'declare_blocked',
+          input: {
+            category: 'CONTENT_NOT_REACHABLE',
+            reason: 'I reached the footer and found no way to add an item.',
+            reasoning: 'The tab order ended without an add control.',
+            confidence: 0.9,
+          },
+        },
+      ]);
+    }
     if (!this.plusIconId) {
       const match = text.match(/\[(\d+)\] image\.\s*\n\s*\[(\d+)\] image\.\s*\n\s*\[\d+\] Blue linen shirt/);
       this.plusIconId = match?.[2] ?? '';
@@ -206,4 +226,30 @@ describe('demo API, real browser, scripted model', () => {
     expect(verify.source).toBe('VERIFY');
     expect(verify.finishedAt).not.toBeNull();
   }, 300_000);
+
+  it('F-81: a run started by hand on the patched site inherits its patches', async () => {
+    // The previous test left ProductCard.tsx patched in fixed-shop.
+    const created = await app.inject({ method: 'POST', url: '/api/runs', payload: { url: FIXED, goal: 'complete checkout', stepBudget: 20 } });
+    expect(created.statusCode).toBe(201);
+    const record = store.get(created.json().id)!;
+    expect(Object.keys(record.overrides)).toEqual(['components/ProductCard.tsx']);
+    expect(record.overrides['components/ProductCard.tsx']).toContain('aria-label={`Add ${product.name} to cart`}');
+    await waitFor(() => (record.finishedAt ? record : undefined), 150_000);
+
+    const onBroken = await app.inject({ method: 'POST', url: '/api/runs', payload: { url: BROKEN, goal: 'complete checkout', stepBudget: 20 } });
+    const brokenRecord = store.get(onBroken.json().id)!;
+    expect(brokenRecord.overrides).toEqual({});
+    await waitFor(() => (brokenRecord.finishedAt ? brokenRecord : undefined), 150_000);
+  }, 320_000);
+
+  it('F-82: an unreachable blocker with focus on a footer link targets the unreachable control, not the link', async () => {
+    const created = await app.inject({ method: 'POST', url: '/api/runs', payload: { url: BROKEN, goal: 'reach the footer and add a shirt', stepBudget: 20 } });
+    const record = store.get(created.json().id)!;
+    await waitFor(() => (record.finishedAt ? record : undefined), 150_000);
+
+    expect(record.status).toBe('BLOCKED');
+    expect(record.blocker?.category).toBe('CONTENT_NOT_REACHABLE');
+    expect(record.blocker?.accessibleName).toBe('Shipping');
+    expect(record.fixTarget).toMatchObject({ tagName: 'div', className: 'add' });
+  }, 180_000);
 });

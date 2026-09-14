@@ -9,7 +9,7 @@ import { describe, expect, it } from 'vitest';
 import { runGoal } from '../../src/agent/loop.js';
 import { roleOf, nameOf } from '../../src/driver/tree.js';
 import { LlmError, type LlmProvider } from '../../src/llm/provider.js';
-import { page } from '../helpers/ax.js';
+import { page, text } from '../helpers/ax.js';
 import { loadRecording, press, ReplayDriver, ScriptedProvider } from '../helpers/fakes.js';
 
 const recording = loadRecording('broken-shop/home-tab-cart.json');
@@ -101,6 +101,46 @@ describe('runGoal on the recorded broken-shop session', () => {
       expect(outcome.outcome.blocker.category).toBe('UNKNOWN');
       expect(outcome.outcome.blocker.summary).toContain('"I completed checkout"');
     }
+  });
+
+  it('DECISIONS.md #18 an add-to-cart goal succeeds when the agent hears the cart count rise after Enter', async () => {
+    const shop = (count: number, focus: 'cart' | 'add') =>
+      page([
+        { role: 'button', name: `Cart (${count})`, id: 10, props: { focusable: true, focused: focus === 'cart' } },
+        { role: 'heading', name: 'Summer sale', props: { level: 1 } },
+        { role: 'button', name: 'Add Blue linen shirt to cart', id: 11, props: { focusable: true, focused: focus === 'add' } },
+        text('Blue linen shirt'),
+        text('$48'),
+        text('Free shipping on orders over $50'),
+      ], 'Linen & Salt');
+    const driver = new ReplayDriver([shop(0, 'cart'), shop(0, 'add'), shop(1, 'add'), shop(1, 'cart')]);
+    const provider = new ScriptedProvider([press('Tab'), press('Enter'), press('Shift+Tab'), { name: 'declare_success', input: { evidence: 'Cart (1)' } }]);
+    const outcome = await runGoal({ goal: 'add a shirt to the cart', stepBudget: 10, driver, llm: provider });
+    expect(outcome.outcome).toMatchObject({ status: 'SUCCEEDED' });
+    if (outcome.outcome.status === 'SUCCEEDED') expect(outcome.outcome.evidence).toMatch(/^The cart count went from 0 to 1 after pressing Enter\./);
+  });
+
+  it('F-83 each decision carries the walked Tab order, and a second Enter on the same control is flagged', async () => {
+    const shop = (count: number, focus: 'cart' | 'add' | 'none') =>
+      page([
+        { role: 'button', name: `Cart (${count})`, id: 10, props: { focusable: true, focused: focus === 'cart' } },
+        { role: 'heading', name: 'Summer sale', props: { level: 1 } },
+        { role: 'button', name: 'Add Blue linen shirt to cart', id: 11, props: { focusable: true, focused: focus === 'add' } },
+        text('Blue linen shirt'),
+        text('$48'),
+        text('Free shipping on orders over $50'),
+      ], 'Linen & Salt');
+    const driver = new ReplayDriver([shop(0, 'none'), shop(0, 'cart'), shop(0, 'add'), shop(1, 'add'), shop(2, 'add')]);
+    const provider = new ScriptedProvider([press('Tab'), press('Tab'), press('Enter'), press('Enter')]);
+    const outcome = await runGoal({ goal: 'add a shirt to the cart', stepBudget: 4, driver, llm: provider });
+
+    const decisions = provider.requests.filter((entry) => entry.kind === 'decide').map((entry) => entry.request.messages[0]!.content[0]!.text);
+    expect(decisions[0]).not.toContain('Tab order you have walked');
+    expect(decisions[2]).toContain('[10] 1. button, Cart (0)\n[11] 2. button, Add Blue linen shirt to cart');
+    expect(decisions[2]).toContain('Focus is on stop 2.');
+    const results = outcome.steps.map((step) => step.actionResult);
+    expect(results[2]).toBe('focus did not move');
+    expect(results[3]).toBe('focus did not move. You already activated this control at step 3; activating it again can repeat the action');
   });
 
   it('three unusable decisions in a row end the run as ERRORED, not as a finding', async () => {

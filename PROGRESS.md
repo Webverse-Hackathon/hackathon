@@ -12,8 +12,8 @@ working, every time, even mid-task. Especially mid-task.
 | **Submission deadline** | 15 Sept, 2026 |
 | **Current day** | Demo build (Days 2–3 compressed, DECISIONS.md #13); demo is 2026-09-15 |
 | **Demo status** | First real-model run passed the gate: BLOCKED at step 9, UNLABELLED_CONTROL, honest verdict. Slow (5.4 min) on free endpoints; Fix not yet run with a real model |
-| **Blocking issue** | None blocking. OpenRouter key works (probe passed through the fallback list). Next: restart `pnpm demo` and do the first real run; 50 free requests a day (F-78) |
-| **Last updated** | 2026-09-14 by the demo build session |
+| **Blocking issue** | Kimi K3 on NIM timed out. `.env` now points at Bynara (DECISIONS.md #17): paste the `sk-nry-` key into `ALLY_OPENAI_COMPAT_API_KEY`, probe with `pnpm agent`, then restart `pnpm demo` |
+| **Last updated** | 2026-09-15 by the model switch session |
 
 ## Milestone board
 
@@ -31,6 +31,30 @@ working, every time, even mid-task. Especially mid-task.
 ## Session log
 
 Newest first. One entry per working session. Keep entries short and factual.
+
+### 2026-09-15 · Model switch session
+
+**Did**
+- Kimi K3 on NIM was timing out. Switched `.env` to Bynara (DECISIONS.md #17): base `https://router.bynara.id/v1`,
+  decide `stepfun-3.7-flash,tencent-hy3-free`, narrate `stepfun-3.7-flash`, effort `low`, step timeout 30000,
+  one concurrent run. No code changed. The API key line was not touched.
+
+- Investigated a Fix that stopped at locate on `app/layout.tsx:24`. Fixed two bugs: F-81 (Fix on a run started by
+  hand on 3101 wiped the earlier ProductCard patch) and F-82 (an unreachable blocker was mapped to the focused footer
+  link). 108 unit tests and the 6 `api.test.ts` integration tests pass; backend typecheck and lint are clean.
+- Confirmation now accepts a cart count heard rising after Enter or Space for add-to-cart goals, with a WCAG 4.1.3
+  note when it was not announced (DECISIONS.md #18). 117 unit tests pass.
+- F-83: a verify run on the patched shop was abandoned. After an unannounced Enter the agent lost the Tab order,
+  re-activated the button and ran out of its 12 steps. Decisions now carry the walked Tab order, a second activation
+  is flagged, and verify runs get at least 20 steps. Real model (stepfun-3.7-flash via Bynara) on 3101:
+  "add a shirt to the cart" SUCCEEDED in 9 of 20 steps. 123 unit tests, 6 integration tests pass.
+- Not fixed, seen in the same runs: a verify run where the model pressed Enter before moving focus, so the loop
+  detector reported a false `AMBIGUOUS_CONTROLS`.
+
+**Next session should**
+1. Paste the `sk-nry-` key into `ALLY_OPENAI_COMPAT_API_KEY` and probe:
+   `pnpm agent --url http://localhost:3100 --goal "complete checkout"`. Check that the model returns real tool calls.
+2. If StepFun fails, try `tencent-hy3-free` first, then `laguna-s-2.1`.
 
 ### 2026-09-14 · Demo build session
 

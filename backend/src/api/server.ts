@@ -29,7 +29,8 @@ import {
 } from '@ally/shared';
 import Fastify, { type FastifyInstance, type FastifyReply } from 'fastify';
 import { loadConfig, loadDotEnv, type Config } from '../config/index.js';
-import { executeFix, fixRefusal, reportVerification } from '../fix/execute.js';
+import { executeFix, fixRefusal, reportVerification, resolveDir } from '../fix/execute.js';
+import { patchesOnVerifySite } from '../fix/workspace.js';
 import { UrlRejected, assertPublicUrl } from '../lib/url-guard.js';
 import { createLlmProvider, missingModelConfig } from '../llm/factory.js';
 import type { LlmProvider } from '../llm/provider.js';
@@ -90,6 +91,10 @@ export function buildApp(deps: AppDeps): { app: FastifyInstance; store: RunStore
       mode: connected(request.url) ? 'REPO_CONNECTED' : 'URL_ONLY',
       source: request.source ?? 'MANUAL',
       stepBudget: request.stepBudget ?? config.ALLY_STEP_BUDGET ?? STEP_BUDGET_DEFAULT,
+      // A run on the verify site tests the patches already there; a fix must build on them (F-81).
+      overrides: sameOrigin(request.url, config.ALLY_VERIFY_SITE_URL)
+        ? patchesOnVerifySite(resolveDir(config.ALLY_CONNECTED_SOURCE_DIR), resolveDir(config.ALLY_VERIFY_SOURCE_DIR))
+        : undefined,
     });
     queue.enqueue(record);
     return record;

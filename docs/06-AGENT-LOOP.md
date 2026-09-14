@@ -99,7 +99,9 @@ Notes that matter:
   transcript for goal-completion evidence, such as a heading or live-region announcement containing
   a confirmation. An unsupported success claim is downgraded to `BLOCKED` with category
   `UNKNOWN` and the reasoning recorded. Hallucinated success is the most dangerous failure this
-  product has; see F-13.
+  product has; see F-13. For an add-to-cart goal, a cart count the agent
+  heard rise after pressing Enter or Space also counts, with a WCAG 4.1.3 note when nothing announced it
+  (DECISIONS.md #18).
 - **There is no `click`, no `goto`, no `evaluate`.** A goal that requires navigating to a different
   URL must be reachable by keyboard from where we started, because that is the real constraint.
 
@@ -121,6 +123,10 @@ Assembled in `backend/src/agent/prompts.ts`. Four blocks, in this order, with th
 **Block 3 — the goal (cached per run)**
 
 **Block 4 — history plus the new transcript (uncached)**
+
+After the new transcript comes the Tab order the agent has walked on this page, rebuilt only from its own Tab and
+Shift+Tab presses and fenced as untrusted page text, with the stop focus is on (F-83). A real user remembers that the
+cart came just before the first product; the model is told rather than trusted to remember.
 
 The transcript is fenced and labelled explicitly as untrusted page content:
 
@@ -207,5 +213,7 @@ When the agent calls `declare_blocked` it may name an `axNodeId` from the transc
 transcript line carries the AX node id it came from, so the model can point at one. The driver maps
 that AX node id to its `backendDOMNodeId`, and that number is the handle for everything downstream:
 axe correlation, DOM path, and the source map. If the agent names no node, we fall back to the node
-that had focus at the blocking step. If there is no focus either, the blocker is recorded without a
+that had focus at the blocking step. For `CONTENT_NOT_REACHABLE` and `NO_KEYBOARD_PATH` that node
+is not trusted as the fix target, because the keyboard reached it: the fixer looks for the clickable element with no
+keyboard path instead (F-82). If there is no focus either, the blocker is recorded without a
 node and the fix flow is unavailable for that run — which we report honestly rather than guessing.

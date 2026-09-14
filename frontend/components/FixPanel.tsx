@@ -12,7 +12,7 @@ export function FixPanel({ fix }: { fix: FixView }) {
   const skippedPr = fix.stages.pr.status === 'skipped';
   return (
     <section className="card fix" aria-labelledby="fix-title">
-      <h2 id="fix-title">The fix</h2>
+      <h2 id="fix-title">THE AUTOMATED FIX</h2>
 
       <ol className="stages">
         {FIX_STAGES.map(({ stage, label }) => {

@@ -40,18 +40,36 @@ async function resolveBackendNode(session: DriverSession, backendNodeId: number)
  * With preferOverlay (a FOCUS_NOT_TRAPPED blocker) the target is the visible
  * full-screen overlay that is not a modal dialog: the agent cannot name it,
  * because without a role it is not in the accessibility tree at all.
+ *
+ * With unreachable (CONTENT_NOT_REACHABLE, NO_KEYBOARD_PATH) the target must be
+ * something the keyboard cannot reach. When the node the agent named (or the one
+ * that merely had focus) is reachable, it cannot be the blocker, so the page is
+ * searched for a clickable element with no keyboard path instead (F-82).
  */
-const INSPECT_FUNCTION = `function (preferOverlay) {
+const INSPECT_FUNCTION = `function (preferOverlay, unreachable) {
   var start = this.nodeType === 1 ? this : this.parentElement;
   if (!start) return null;
-  function looksInteractive(el) {
-    var tag = el.tagName.toLowerCase();
-    if (['a', 'button', 'input', 'select', 'textarea', 'summary'].indexOf(tag) >= 0) return true;
-    if (el.hasAttribute('role') || el.hasAttribute('tabindex') || el.hasAttribute('onclick')) return true;
+  function declaresPointer(el) {
     // cursor is inherited: only the element that declares the pointer is the control,
     // not the icon inside it.
     if (window.getComputedStyle(el).cursor !== 'pointer') return false;
     return !el.parentElement || window.getComputedStyle(el.parentElement).cursor !== 'pointer';
+  }
+  function looksInteractive(el) {
+    var tag = el.tagName.toLowerCase();
+    if (['a', 'button', 'input', 'select', 'textarea', 'summary'].indexOf(tag) >= 0) return true;
+    if (el.hasAttribute('role') || el.hasAttribute('tabindex') || el.hasAttribute('onclick')) return true;
+    return declaresPointer(el);
+  }
+  function keyboardReachable(el) {
+    return el.tabIndex >= 0 && !el.disabled && el.getClientRects().length > 0;
+  }
+  // A <div onClick> and its kind: visible, clickable, and not in the tab order.
+  function clickableButUnreachable(el) {
+    if (el.tabIndex >= 0 || el.getClientRects().length === 0) return false;
+    var tag = el.tagName.toLowerCase();
+    if (['a', 'button', 'input', 'select', 'textarea', 'summary', 'label', 'option', 'body', 'html'].indexOf(tag) >= 0) return false;
+    return el.hasAttribute('onclick') || declaresPointer(el);
   }
   function domPath(el) {
     var parts = [];
@@ -104,6 +122,25 @@ const INSPECT_FUNCTION = `function (preferOverlay) {
     if (found) target = found;
     container = container.parentElement;
   }
+  var isBody = start.tagName.toLowerCase() === 'body';
+  if (unreachable && !(target && clickableButUnreachable(target))) {
+    // Group the page's unreachable clickables by tag and class: one group is one source
+    // element, often rendered in a loop. More than one group would be a guess.
+    var groups = {};
+    Array.prototype.forEach.call(document.body.querySelectorAll('*'), function (el) {
+      if (!clickableButUnreachable(el)) return;
+      var key = el.tagName + '.' + (el.getAttribute('class') || '');
+      if (!groups[key]) groups[key] = el;
+    });
+    var keys = Object.keys(groups);
+    if (keys.length === 1) target = groups[keys[0]];
+    if (!target || keyboardReachable(target)) {
+      window.__allyFixTarget = null;
+      return { node: { outerHtml: clip(start.outerHTML), domPath: domPath(start) }, target: null };
+    }
+  }
+  // With no node named, report the element found rather than the page body.
+  if (isBody && target) start = target;
   if (!target) target = start;
   function clip(html) { return html.length > 600 ? html.slice(0, 600) + '…' : html; }
   window.__allyFixTarget = target;
@@ -122,7 +159,8 @@ const INSPECT_FUNCTION = `function (preferOverlay) {
 export interface BlockerDomFacts {
   domPath: string;
   htmlSnippet: string;
-  fixTarget: FixTarget;
+  /** Null when no element can honestly be named: the fix is then unavailable, not guessed. */
+  fixTarget: FixTarget | null;
 }
 
 async function bodyRef(session: DriverSession): Promise<ElementHandleRef | null> {
@@ -138,19 +176,20 @@ async function bodyRef(session: DriverSession): Promise<ElementHandleRef | null>
 export async function inspectBlocker(
   session: DriverSession,
   backendNodeId: number | null,
-  options: { preferOverlay: boolean },
+  options: { preferOverlay: boolean; unreachable: boolean },
 ): Promise<BlockerDomFacts | null> {
-  // With no node, an overlay search can still start from the page body.
-  const ref = backendNodeId !== null ? await resolveBackendNode(session, backendNodeId) : options.preferOverlay ? await bodyRef(session) : null;
+  // With no node, an overlay or unreachable-control search can still start from the page body.
+  const searchesPage = options.preferOverlay || options.unreachable;
+  const ref = backendNodeId !== null ? await resolveBackendNode(session, backendNodeId) : searchesPage ? await bodyRef(session) : null;
   if (!ref) return null;
   const { cdp } = internalsOf(session);
   try {
     const result = (await cdp.send('Runtime.callFunctionOn', {
       objectId: ref.objectId,
       functionDeclaration: INSPECT_FUNCTION,
-      arguments: [{ value: options.preferOverlay }],
+      arguments: [{ value: options.preferOverlay }, { value: options.unreachable }],
       returnByValue: true,
-    })) as { result: { value?: { node: { outerHtml: string; domPath: string }; target: FixTarget } | null } };
+    })) as { result: { value?: { node: { outerHtml: string; domPath: string }; target: FixTarget | null } | null } };
     const value = result.result.value;
     if (!value) return null;
     return { domPath: value.node.domPath, htmlSnippet: value.node.outerHtml, fixTarget: value.target };

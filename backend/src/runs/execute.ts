@@ -114,7 +114,10 @@ export async function executeRun(record: RunRecord, deps: RunnerDeps): Promise<v
     if (outcome.status === 'BLOCKED') {
       const { blocker } = outcome;
       blockerCategory = blocker.category;
-      const facts = await inspectBlocker(session, blocker.backendNodeId, { preferOverlay: blocker.category === 'FOCUS_NOT_TRAPPED' });
+      const facts = await inspectBlocker(session, blocker.backendNodeId, {
+        preferOverlay: blocker.category === 'FOCUS_NOT_TRAPPED',
+        unreachable: blocker.category === 'CONTENT_NOT_REACHABLE' || blocker.category === 'NO_KEYBOARD_PATH',
+      });
       record.blocker = {
         atStep: blocker.atStep,
         category: blocker.category,

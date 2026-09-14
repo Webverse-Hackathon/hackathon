@@ -78,6 +78,9 @@ When you fix one, change its status, add the commit, and add a fixture to `10-TE
 | F-78 | Infra | The free model tier's daily request cap runs out before the demo | Critical | KNOWN |
 | F-79 | Infra | Free model endpoints are overloaded, or write tool calls as text | Critical | HIT · MITIGATED |
 | F-80 | Infra | NVIDIA NIM trial: shared 40 RPM, prototype-only terms, errors and tool_choice differ | High | MITIGATED |
+| F-81 | Fix | Fixing a run started by hand on the verify site wipes the patches already there | High | HIT · MITIGATED |
+| F-82 | Fix | An unreachable blocker is mapped to the element that had focus, which the keyboard reached | High | HIT · MITIGATED |
+| F-83 | Agent | After an unannounced action the agent loses the Tab order, re-activates the control and runs out of steps | High | HIT · MITIGATED |
 
 ---
 
@@ -212,7 +215,7 @@ the transcript: a heading, status role or live-region announcement that plausibl
 or a URL change consistent with completion. No evidence means the claim is downgraded to `BLOCKED`
 with category `UNKNOWN` and the unsupported claim is recorded verbatim in the report. We show the
 downgrade rather than hiding it.
-**Status.** MITIGATED (Phase 1 session, 2026-09-14, uncommitted): `agent/confirm.ts`. Evidence must be a heading, status, alert or live announcement in past tense, or a confirming URL change; a claim right after a flagged injection is refused. Tests: X-01 to X-04, plus "Complete your order" is not confirmation.
+**Status.** MITIGATED (Phase 1 session, 2026-09-14, uncommitted): `agent/confirm.ts`. Evidence must be a heading, status, alert or live announcement in past tense, or a confirming URL change; a claim right after a flagged injection is refused. Tests: X-01 to X-04, plus "Complete your order" is not confirmation. Widened 2026-09-15 (DECISIONS.md #18): for an add-to-cart goal, a cart count the agent heard rise after an Enter or Space also confirms, never the model's own evidence text; X-05 to X-09. Known gap: it cannot tell which item was added.
 
 ### F-14 · Prompt injection from page content — High
 
@@ -662,6 +665,55 @@ Keep `ALLY_OPENAI_COMPAT_REASONING_EFFORT=low` (or `none` if the model rejects t
 and at most 2 runs at once. Prototype-only terms: replace before production.
 **Test.** `tests/unit/openai-compatible.test.ts` "falls back to tool_choice auto once when a server rejects required".
 **Status.** MITIGATED (demo build session, 2026-09-14). Items 3 to 5 need the live probe with an `nvapi-` key.
+
+### F-81 · Fixing a run on the verify site wipes the patches already there — High
+
+**Trigger.** A fix passes and its verify run is blocked. Someone then starts a new run by hand (or Re-run) on the verify
+site, `http://localhost:3101`, and presses Fix on that run.
+**Symptom.** Live, 2026-09-15: the first fix turned `div.add` into a button. A manual run on 3101 reached it and added the
+shirt. Fix on that run patched `Header.tsx`, and its verify run could not reach the Add button again. It was a
+`<div>` once more, because a manual run had no overrides, so `syncVerifySite` re-copied broken-shop and applied only the
+header patch.
+**Mitigation.** `api/server.ts` gives any run created on the verify site's origin the patches that site is serving:
+`fix/workspace.ts` `patchesOnVerifySite` returns every `.tsx`/`.jsx` file that differs from the connected source. A fix
+on that run locates, reads and syncs on top of them. Read from disk, so it survives an API restart. Remaining race: a run
+started while a fix is mid-validation can capture that fix's candidate patch.
+**Test.** `backend/tests/unit/workspace.test.ts`; `backend/tests/integration/api.test.ts` "F-81: a run started by hand on
+the patched site inherits its patches".
+**Status.** HIT, MITIGATED (model switch session, 2026-09-15).
+
+### F-82 · An unreachable blocker is mapped to whatever had focus — High
+
+**Trigger.** `CONTENT_NOT_REACHABLE` or `NO_KEYBOARD_PATH` where the agent names no node, or names one it reached. The loop
+falls back to the focused node (docs/06), which after a full Tab cycle is the last thing in the tab order.
+**Symptom.** Live, 2026-09-15: the blocker became the footer link `<a href="#">Shipping</a>`. Two classless `<a>` elements
+matched in `app/layout.tsx`, locate confidence was 25%, and the fix stopped at locate. With one match it would
+have patched a link that works.
+**Mitigation.** `baseline/axe.ts` `inspectBlocker` with `unreachable`: a fix target for these categories must not be in
+the tab order. If the node's own search does not find a clickable element with no keyboard path, it scans the page for
+them, grouped by tag and class. One group becomes the target; none, or several, leaves no target, so the fix is
+reported as unavailable rather than guessed. The blocker's node, role and name in the report stay what the agent perceived.
+**Test.** `backend/tests/integration/api.test.ts` "F-82: an unreachable blocker with focus on a footer link targets the
+unreachable control, not the link".
+**Status.** HIT, MITIGATED (model switch session, 2026-09-15).
+
+### F-83 · The agent loses the Tab order after an unannounced action — High
+
+**Trigger.** A verify run on a site where activating a control announces nothing, such as the patched shop's Add button
+with no live region. The agent has to go and check the result somewhere else, and the step budget is small.
+**Symptom.** Live verify run `85b3be6f`, 2026-09-15, budget 12: Enter on "Add Blue linen shirt to cart" worked, and
+"nothing new was announced". The agent said it would move to the Cart button, then pressed Tab, away from it. It came
+back with Shift+Tab, pressed Space on the same button (a second shirt), pressed Tab again, and ran out of steps:
+`ABANDONED`. The verify run had inherited the parent run's budget of 12.
+**Mitigation.** `agent/tab-order.ts` rebuilds the Tab order from the agent's own Tab and Shift+Tab presses, and each
+decision prompt carries it, fenced as untrusted page text, with the stop focus is on. A focus move by any other key is
+not guessed into the order, and a page change resets it. The system prompt says not to re-activate a control
+when nothing was announced, and to check the result using that order. An Enter or Space on a control already activated
+reports "You already activated this control at step N". A verify run gets at least `STEP_BUDGET_DEFAULT` (20) steps.
+**Test.** `backend/tests/unit/tab-order.test.ts` T-01 to T-05; `backend/tests/unit/loop.test.ts` "F-83". Real model, same
+site: `pnpm agent --url http://localhost:3101 --goal "add a shirt to the cart" --budget 20` succeeded in 9 steps
+(Tab ×6, Enter, Shift+Tab to "Cart (1)", declare_success).
+**Status.** HIT, MITIGATED (model switch session, 2026-09-15).
 
 ---
 
